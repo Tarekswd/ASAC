@@ -1,6 +1,6 @@
 # Potato Routing and the Potarek Search Engine: Implementation Plan
 
-Status: draft v0.1, 2026-10-26
+Status: draft v0.2, 2026-10-26
 Sources: Tor spec repo `torspec` at commit `f0cda49b` (2026-10-22) and Arti at commit `c87b1abe` (2026-10-22), both cloned and read for this plan.
 Paths like `spec/tor-spec/...` and `proposals/...` refer to the torspec repo, and `crates/...` to Arti.
 Anything marked **(unverified)** comes from memory, not from the sources. Check it before relying on it.
@@ -97,6 +97,11 @@ Decisions recorded so they are not re-litigated. Each is a deliberate "no", with
   asm would add memory-safety and timing-side-channel risk. Reconsider only for one measured hotspot, and only
   behind a vetted library with constant-time guarantees.
 - **No claim to detect local surveillance of the user's device** (see 2.1 out-of-scope and 3.10).
+- **No PHP and no JavaScript in the stack.** Implementation is Rust (plus unavoidable build and config files). The
+  Potarek results page is static, server-rendered HTML with **no client-side JavaScript** — which also removes a
+  major fingerprinting and exploit surface and matches the existing "no JS needed" front-end rule (4.2). If a
+  dynamic UI ever becomes unavoidable, prefer server-side rendering, or a Rust-to-WASM path, over JavaScript, and
+  never PHP.
 
 ---
 
@@ -113,10 +118,12 @@ Each item below includes: what it is, where it lives in Arti, what is new, and h
 
 ### 3.2 Handshake: hybrid post-quantum ntor-v3
 - Base: ntor-v3 (`create-created-cells.md:296`) combined with ML-KEM, following the options in `proposals/355`.
-- Library: a vetted ML-KEM implementation, such as RustCrypto `ml-kem` **(unverified)**. Never a homemade one.
-- Size problem: ML-KEM keys and ciphertexts are larger than one 509-byte cell body **(unverified, check the
-  ML-KEM-768 sizes)**, so handshakes must span cells. Read `proposals/249-large-create-cells.txt` for the
-  existing approach.
+- Library: a vetted ML-KEM implementation. RustCrypto's pure-Rust `ml-kem` crate implements FIPS 203 (final) and
+  is the leading candidate [verified: crates.io/crates/ml-kem, github.com/RustCrypto/KEMs]; confirm its audit
+  status before shipping. Never a homemade one.
+- Size problem: ML-KEM-768 has a 1184-byte encapsulation key and a 1088-byte ciphertext [verified: NIST FIPS 203],
+  both far larger than one 509-byte cell body, so handshakes must span cells. Read
+  `proposals/249-large-create-cells.txt` for the existing approach.
 - Hybrid rule: the session key = KDF(x25519 secret || ML-KEM secret), so breaking one still leaves the other.
 - Check: formal model in Tamarin or ProVerif **(unverified tool choice)**, plus fuzzing the cell parser.
 
@@ -182,6 +189,21 @@ Each item below includes: what it is, where it lives in Arti, what is new, and h
   Browser's own anti-fingerprinting. These live in the user's OS and browser, not in Potato. **(unverified:
   specific OS feature names not checked this session.)**
 
+### 3.11 Circuit rotation (route "shuffling")
+- The request "shuffle the route every N seconds" maps onto Tor's existing behavior: Tor already rotates the
+  circuit used for *new* connections once the current one has been dirty for `MaxCircuitDirtiness`, which
+  defaults to 10 minutes [verified: forum.torproject.org/t/.../11121, tor.stackexchange.com/questions/262]. So
+  Potato tunes this existing knob per mode; it does not invent a new IP-shuffling protocol.
+- **Faster is not more private.** Rotating circuits more often means touching more guards and exits per hour,
+  which *grows* the number of relays that see you and the surface for correlation, and it pays a fresh
+  circuit-build latency each time. So a short interval is a privacy *cost*, not a win.
+- **The guard (first hop) is deliberately sticky** and must stay so: persistent guards exist precisely to avoid
+  reshuffling the entry point (`spec/guard-spec/algorithm.md`). Potato only varies middle/exit selection within
+  the mode's rules (3.3), never the guard on a timer.
+- Potato rule: expose rotation as a documented, bounded per-mode setting with a sane default (start from Tor's
+  10 minutes), not a "new identity every few seconds" toggle. Already-open streams are never migrated
+  mid-connection; rotation applies to new streams, as in Tor.
+
 ---
 
 ## 4. Potarek search engine
@@ -214,8 +236,8 @@ user (Tor Browser / Potato client)
    - Hash-match against known-illegal-content lists through an industry partner, keyword and classifier
      filters, and a manual abuse-report process. Existing onion search engines keep blocklists **(unverified)**.
    - Get legal advice in your jurisdiction before crawling. **This is a launch blocker.**
-3. **Indexer**: Tantivy (Rust full-text search, BM25) **(unverified)**. Store only title, URL, extracted text and
-   outgoing links.
+3. **Indexer**: Tantivy, a Rust full-text search library with Lucene-style BM25 scoring [verified:
+   github.com/quickwit-oss/tantivy]. Store only title, URL, extracted text and outgoing links.
 4. **Ranking**: v1 BM25. v2 adds link-graph authority (PageRank-style) and freshness. v3 adds spam and phishing
    detection, since cloned scam onion sites are common **(unverified)**.
 5. **Front end**: served as a v3 onion service with Equi-X PoW, a plain HTML results page, no third-party
@@ -346,3 +368,32 @@ Each phase ends with a gate. Don't start the next phase until the gate passes.
 3. Read these fully: `proposals/359-cgo-redux.md`, `proposals/355-revisiting-pq.md`,
    `proposals/329-traffic-splitting.md` and `proposals/324-rtt-congestion-control.txt`.
    Then write the threat-model document.
+
+---
+
+## 10. Research log
+
+Kept so the "research as we go" improvements and their sources stay auditable. Each entry is dated and sourced;
+`[verified: ...]` means checked against the cited source, not recalled from memory.
+
+### 2026-10-26 (v0.2)
+- ML-KEM-768 sizes confirmed: 1184-byte encapsulation key, 1088-byte ciphertext, 32-byte shared secret
+  [verified: NIST FIPS 203]. Both exceed the 509-byte cell body, so the multi-cell handshake (3.2) is required,
+  not optional.
+- RustCrypto `ml-kem` crate confirmed to exist (pure Rust, FIPS 203 final) [verified: crates.io/crates/ml-kem].
+  Independent audit status still to confirm before shipping.
+- Tantivy confirmed as a Rust full-text search library with Lucene-style BM25 [verified:
+  github.com/quickwit-oss/tantivy].
+- Tor `MaxCircuitDirtiness` default confirmed at 10 minutes [verified: Tor Project forum, Tor StackExchange];
+  informs the circuit-rotation rule (3.11).
+- Policy added: privacy beats latency (section 0); non-goals recorded (2.3) — no PHP/JavaScript, no
+  PostgreSQL-source fork, no hand-written C/asm; optional client-side decoy queries (4.3); and the explicit
+  no-local-surveillance-detection stance (3.10).
+
+### Open items to research in upcoming phases
+- Phase 0: confirm `chutney` is still the current Tor test-network tool, and whether Shadow runs Arti directly
+  **(unverified)**.
+- Phase 2: ML-KEM crate audit status; exact `proposals/249` large-cell handshake mechanics; formal-analysis tool
+  choice (Tamarin vs ProVerif).
+- Phase 3: survey published latency-aware-routing attacks to bound `k` in 3.3; measure cover-traffic cost.
+- Phase 4: realistic decoy-query distribution sources; onion-content blocklist partners and the legal review.
