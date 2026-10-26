@@ -462,6 +462,15 @@ Kept so the "research as we go" improvements and their sources stay auditable. E
   C-tor path (median 228 ms). Throughput needs a large target; the tiny page reads 0.0 by the guard. This is
   the Phase 0 baseline the gate asks for; Shadow-side baseline still pending.
 
+### 2026-10-26 (Phase 0 threat-model doc + toolchain verified)
+- Wrote the standalone threat model as `docs/THREAT-MODEL.md` (adversaries + guarantees, explicit out-of-scope,
+  assumptions/trust boundaries, modes-vs-threats, residual risks), expanding PLAN.md 2.1 — the last non-tooling
+  Phase 0 deliverable.
+- Verified the dev toolchain end to end [verified: install check]: Rust 1.92 + clippy + rustfmt, tor 0.4.9.14 +
+  tor-gencert, arti 2.7.0, libssl/ libsqlite3/ libclang/ glib (t64) dev libs, python3-networkx, the asyncore
+  backports, and cargo-deny/fuzz/audit. Only `libc-dbg` (a Shadow dep) may still be missing; the Shadow build
+  will confirm.
+
 ### Open items to research in upcoming phases
 - Phase 0: confirm `chutney` is still the current Tor test-network tool, and whether Shadow runs Arti directly
   **(unverified)**.
