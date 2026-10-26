@@ -435,6 +435,11 @@ Kept so the "research as we go" improvements and their sources stay auditable. E
   Python 3.12; the `pyasyncore` backport lets chutney run but does not drive the self-test's I/O loop
   [verified: tasks stay "not done"]. Bootstrap (what Phase 0 needs) is unaffected; run the self-test on Python
   <= 3.11 if needed. Documented in `testnet/README.md`.
+- With the system `tor` installed, a fresh network's authorities reach 100% and publish a full consensus
+  [verified: run showed authorities at 100%, all nodes in `md_cons/ns_cons`, "Dir info cached"], but relays and
+  clients can stall at 95% "Establishing a Tor circuit" under WSL + tor 0.4.9.11 within the wait window. Raised
+  the wait to `CHUTNEY_START_TIME=180` in `run-chutney.sh`; the newer tor 0.4.9.14 converged further. Documented
+  with mitigations in `testnet/README.md`.
 - Shadow remains scripted-but-not-run (needs a sudo build; WSL2 support unverified).
 
 ### Open items to research in upcoming phases

@@ -52,6 +52,23 @@ python3.11 -m venv ~/.chutney-venv && ~/.chutney-venv/bin/python -m pip install 
 # then run chutney with ~/.chutney-venv/bin/python on PATH
 ```
 
+### Known flakiness: last-5% bootstrap under WSL + tor 0.4.9.11
+
+Observed this session with the Ubuntu `tor` 0.4.9.11 package in WSL2: the directory **authorities reach 100%
+and publish a full consensus** (all nodes, `desc md md_cons ns_cons`, "Dir info cached"), but the relays and
+clients can stall at **95%, "Establishing a Tor circuit"** within the wait window, so `wait_for_bootstrap`
+reports failure even though the network is substantially up (verified: authorities 100%, consensus distributed;
+the Tor Expert Bundle's newer tor 0.4.9.14 got further in earlier runs).
+
+`run-chutney.sh` already raises the wait to `CHUTNEY_START_TIME=180`. If you hit this, options in order of
+preference:
+
+- Install the current stable `tor` (0.4.9.14+) from the official repo instead of the distro package:
+  <https://support.torproject.org/apt/> — the newer tor converged further here.
+- Increase the window further: `CHUTNEY_START_TIME=300 ./run-chutney.sh`.
+- For development you often do not need 100% of all nodes: once the authorities publish a consensus, you can
+  point Arti/Potato at the network and build your own circuits.
+
 ## Shadow (scaled simulation)
 
 Shadow builds from source and needs system dev packages (hence sudo), so it is not installed automatically.

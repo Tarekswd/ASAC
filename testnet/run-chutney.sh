@@ -12,6 +12,9 @@ if ! command -v tor >/dev/null 2>&1 || ! command -v tor-gencert >/dev/null 2>&1;
   exit 1
 fi
 export CHUTNEY_LISTEN_ADDRESS=127.0.0.1
+# chutney's bootstrap wait loop is bounded by CHUTNEY_START_TIME (default 60s), which is tight for a cold
+# test network under WSL / CPU load. Give it more room; override by exporting CHUTNEY_START_TIME yourself.
+export CHUTNEY_START_TIME="${CHUTNEY_START_TIME:-180}"
 
 FLAVOR="${1:-basic}"
 cd chutney
