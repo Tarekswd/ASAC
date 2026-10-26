@@ -22,6 +22,29 @@ Anything marked **(unverified)** comes from memory, not from the sources. Check 
    `MIT OR Apache-2.0`, `crates/tor-proto/Cargo.toml:7`) and on audited libraries. Potato's new parts are
    *policy and composition*, not new primitives.
 
+## 0.1 North star (what makes this worth doing)
+
+Potato as a Tor client is "compose Arti well" — useful, but not novel. The differentiator is **Potarek: a
+search engine that is *mathematically unable* to profile you** — privacy you do not have to trust the operator
+for. Every existing onion search engine offers a *no-log policy* you must take on faith [verified: Ahmia,
+DuckDuckGo onion, and newer "no-log" engines all advertise exactly this]; Potarek aims for operator-blindness
+**by construction**.
+
+**The idea that makes this reachable:** search is *latency-tolerant*. A query is tiny and infrequent and can
+wait seconds. Tor cannot defeat a global passive adversary because general browsing needs low latency — but
+the heavyweight defenses that *do* resist a global adversary (mixnet-style mixing and cover traffic) and that
+hide the query itself (private information retrieval) are exactly affordable when you only need them for
+search. So Potarek deploys, for the narrow search path, the strong defenses Tor's general-purpose design
+cannot: **PIR** (the operator cannot learn *what* you searched) + **mixnet-style cover traffic** (a network
+observer cannot learn *that/when* you searched, or link you to the server) + **decoy queries**.
+
+**Honest scope (do not overclaim):** this does not "solve mass surveillance" for general traffic. It targets
+*provable query-content privacy* (PIR — a clean cryptographic guarantee) and *measured metadata-unobservability*
+(mixing + cover traffic, under stated assumptions: enough cover volume, a mixing-delay budget, an honest
+fraction of mix nodes). General browsing through Potato keeps Tor's usual global-adversary limit. The research
+contribution is the *combination, applied to the latency-tolerant search niche, with every leak measured* — the
+detailed design is in section 4.4.
+
 ---
 
 ## 1. What Tor already gives us (the base we build on)
@@ -65,6 +88,10 @@ Protect against:
 Out of scope (same as Tor; say this openly to users):
 - A global passive adversary watching both ends. Tor's low-latency design cannot stop end-to-end timing
   correlation **(unverified)**. Potato's "Fortress" mode only *reduces* the risk.
+  - **Exception — the search path (Potarek).** Because search tolerates latency (see 0.1), Potarek pushes
+    *past* Tor's global-adversary limit for queries: PIR for query content and mixnet-style cover traffic for
+    metadata. This is in scope *for search only*, under stated assumptions, and is the project's flagship
+    research goal (section 4.4). General browsing through Potato keeps the Tor limit above.
 - A compromised endpoint device or browser fingerprinting. That is the browser's job.
 - **Detecting whether someone is watching your screen, or whether spyware or monitoring software is on your
   device.** A privacy client cannot do this reliably: if the endpoint is already compromised it can lie to us,
@@ -210,7 +237,8 @@ Each item below includes: what it is, where it lives in Arti, what is new, and h
 
 ### 4.1 Goal
 A search engine that indexes onion services (and optionally the clear web through Potato), runs as an onion
-service itself, and is designed so its operators cannot build user profiles.
+service itself, and is designed so its operators are **mathematically unable to profile users** — operator-blind
+by construction (section 4.4), not merely promising not to log.
 
 ### 4.2 Architecture
 
@@ -254,8 +282,35 @@ user (Tor Browser / Potato client)
 6. **Privacy of queries.**
    - v1: no query logs. Only aggregate counters in memory, never per-query. Documented and published.
    - v1: Potato circuits already hide the user's IP from Potarek.
-   - v2 research: private information retrieval (PIR), so the server cannot see the query even in memory. Practical
-     only for small indexes today **(unverified)**. Prototype on a top-N result cache first.
+   - v2 and beyond: this is the **flagship** — see 4.4. The no-log policy above is table stakes (every onion
+     search engine claims it); 4.4 makes profiling impossible *by construction*, not just promised.
+
+### 4.4 Provable, trustless query privacy (the differentiator)
+
+Goal: an operator (including us) and a network observer **cannot** learn what a user searched — not by promise,
+by construction. Three composed mechanisms, each with an honest limit:
+
+1. **PIR (private information retrieval)** — the server answers a query without learning which query it
+   answered [verified: PIR definition, CACM; single-server schemes like PIANO, 2024]. A clean cryptographic
+   guarantee on query *content*. Limit: PIR is expensive and today practical mainly over a *small* index — so
+   prototype over a curated top-N / most-common-queries index first, not the full crawl **(unverified: current
+   PIR scale)**.
+2. **Mixnet-style cover traffic on the search path** — a Loopix-style layer so a global passive observer
+   cannot tell *that* or *when* a user searched, or link them to Potarek [verified: mixnets resist the global
+   passive adversary that Tor cannot, via mixing + cover traffic; Loopix, USENIX Security 2017]. Limit: costs
+   latency and bandwidth, and needs enough cover volume and an honest fraction of mix nodes; this is why it is
+   confined to the latency-tolerant search path, not general browsing.
+3. **Decoy queries** (4.3 item 7) — client-side noise, defense in depth.
+
+**Why this is reachable here but not in Tor:** search tolerates seconds of latency, so the mixing delay and
+cover traffic a global adversary forces are affordable; general web browsing cannot pay that cost, which is why
+Tor leaves the global adversary out of scope. See 0.1.
+
+**Research / award path:** build the PIR prototype over a small index, add the mix transport, *measure* the
+query-content guarantee and the metadata anonymity set in Shadow, and write it up. Target a published
+PoPETs/PETS result (the Caspar Bowden PET Award is given for published PET papers) **(unverified: current
+PoPETs deadlines)**. Do not claim a speed or general-anonymity breakthrough; claim provable query privacy plus
+measured search-path unobservability.
 7. **Decoy queries (optional, client-side, off by default).** The Potato client can mix the user's real searches
    with random, plausible-looking decoy searches, so anyone watching query *timing and volume* cannot pick the
    real ones out of the noise. This is a TrackMeNot / query-obfuscation style defense **(unverified)**. It is the
@@ -529,6 +584,17 @@ Kept so the "research as we go" improvements and their sources stay auditable. E
   (vanguards-lite, full padding, standard rotation), pinned explicitly; speed gate dropped (privacy over speed).
   Deliverables: `potato-policy` modes, `balanced.toml` + run script (verified bootstrapping on 9150), the
   Balanced-vs-baseline benchmark, and the fingerprint analysis.
+
+### 2026-10-26 (North-star pivot: trustless query privacy)
+- Reframed the project around a defensible differentiator (new sections 0.1 and 4.4, plus `docs/
+  DIFFERENTIATION.md`): Potarek as a search engine that is *mathematically unable* to profile users, versus
+  the no-log *policies* every existing onion search engine advertises [verified: Ahmia/DuckDuckGo-onion/others].
+- Key insight recorded: search is latency-tolerant, so it can afford the anti-global-adversary defenses Tor
+  cannot — mixnet-style cover traffic (metadata) + PIR (query content) + decoy queries [verified: mixnets
+  resist the GPA via mixing/cover traffic (Loopix); PIR hides the query from the server (PIANO/CACM)]. Carved a
+  search-path exception into the threat model (2.1), honestly scoped: provable query-*content* privacy +
+  *measured* metadata-unobservability under stated assumptions, NOT a general "mass surveillance solved" claim.
+- This becomes the flagship research/paper track (PoPETs/PETS). The routing layer stays "compose Arti well."
 
 ### Open items to research in upcoming phases
 - Phase 0: confirm `chutney` is still the current Tor test-network tool, and whether Shadow runs Arti directly
