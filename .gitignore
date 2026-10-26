@@ -1,0 +1,27 @@
+# Rust
+/target/
+**/*.rs.bk
+*.pdb
+
+# Cargo lock is kept for binaries/workspaces; remove the next line if this becomes a library-only crate
+# Cargo.lock
+
+# Build and test artifacts
+/dist/
+*.profraw
+
+# Simulation / benchmark output (Shadow, chutney, local test networks)
+/shadow.data/
+/chutney-data/
+*.log
+/bench-results/
+
+# Local agent/tooling state
+.claude/
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
