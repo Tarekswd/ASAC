@@ -9,6 +9,8 @@
 //! Upgrade to a sublinear single-server scheme (e.g. a PIANO-style construction) when the index grows — the
 //! `PirServer`/`PirClient` split here is the seam to swap behind.
 
+pub mod two_server;
+
 /// A small key -> value database to be served under PIR. Keys are searchable terms/ids; values are the
 /// serialized result records.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
@@ -127,5 +129,27 @@ mod tests {
         // Alice and Bob read different records, but nothing about those reads reached the server.
         assert_eq!(alice.get("weather"), Some(&b"weather results"[..]));
         assert_eq!(bob.get("maps"), Some(&b"map results"[..]));
+    }
+
+    /// Trivial PIR's download scales with the whole index (O(N)): the server always ships every record. This
+    /// documents *why* trivial PIR is only viable for a small index (PLAN.md 4.4 shortcut); larger indexes
+    /// need the two-server scheme or a sublinear single-server one.
+    #[test]
+    fn snapshot_download_grows_linearly_with_index() {
+        let bytes = |n: usize| -> usize {
+            let mut db = PirDatabase::new();
+            for k in 0..n {
+                db.insert(format!("term{k}"), vec![0u8; 100]);
+            }
+            PirServer::new(db)
+                .snapshot()
+                .iter()
+                .map(|(k, v)| k.len() + v.len())
+                .sum()
+        };
+        let small = bytes(10);
+        let large = bytes(100);
+        // ~10x the records must mean ~10x the download (allow slack for key-length variation).
+        assert!(large >= small * 8, "download must grow ~linearly with N: {small} -> {large}");
     }
 }
