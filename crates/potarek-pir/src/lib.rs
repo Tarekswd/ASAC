@@ -9,6 +9,7 @@
 //! Upgrade to a sublinear single-server scheme (e.g. a PIANO-style construction) when the index grows — the
 //! `PirServer`/`PirClient` split here is the seam to swap behind.
 
+pub mod single_server;
 pub mod two_server;
 
 /// A small key -> value database to be served under PIR. Keys are searchable terms/ids; values are the
