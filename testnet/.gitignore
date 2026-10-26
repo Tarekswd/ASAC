@@ -1,0 +1,5 @@
+# Downloaded tooling and generated network state - never committed.
+.toolcache/
+chutney/
+net/
+*.tar.gz

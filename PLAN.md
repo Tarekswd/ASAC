@@ -423,6 +423,20 @@ Kept so the "research as we go" improvements and their sources stay auditable. E
 - Note: the Windows host has only standalone Rust 1.89 and no MSVC linker, so the supported build path is
   Linux (WSL or native). Recorded in the crate README.
 
+### 2026-10-26 (Phase 0 test network: chutney)
+- Added `testnet/`: a chutney harness (`setup-chutney.sh`, `run-chutney.sh`) and a scripted+documented Shadow
+  setup (`shadow/`). Verified this session that a chutney private Tor network **launches and forms circuits**
+  [verified: debug run showed clients connecting to the exit, `failure_count == 0`].
+- Prerequisite learned: chutney needs **`tor-gencert`** (builds authority keys) in addition to `tor`; both ship
+  in the Debian/Ubuntu `tor` package [verified: packages.debian.org file list]. The Tor Expert Bundle ships
+  `tor` but not `tor-gencert`, so it cannot build a network from scratch — the harness now requires the system
+  `tor` package.
+- Limitation: chutney's byte-transfer self-test (`chutney verify`) uses `asyncore`/`asynchat`, removed in
+  Python 3.12; the `pyasyncore` backport lets chutney run but does not drive the self-test's I/O loop
+  [verified: tasks stay "not done"]. Bootstrap (what Phase 0 needs) is unaffected; run the self-test on Python
+  <= 3.11 if needed. Documented in `testnet/README.md`.
+- Shadow remains scripted-but-not-run (needs a sudo build; WSL2 support unverified).
+
 ### Open items to research in upcoming phases
 - Phase 0: confirm `chutney` is still the current Tor test-network tool, and whether Shadow runs Arti directly
   **(unverified)**.
