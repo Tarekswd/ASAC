@@ -1,0 +1,13 @@
+[package]
+name = "potato-bench"
+version = "0.0.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish = false
+description = "Benchmark harness: connect time, TTFB, total fetch time and throughput through a SOCKS5 proxy."
+
+[dependencies]
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "io-util", "time"] }
+anyhow = "1"

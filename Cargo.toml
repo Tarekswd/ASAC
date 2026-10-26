@@ -5,6 +5,7 @@ members = [
     "crates/potato",
     "crates/potato-policy",
     "crates/potarek-decoy",
+    "crates/potato-bench",
 ]
 
 [workspace.package]

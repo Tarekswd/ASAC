@@ -2556,6 +2556,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "potato-bench"
+version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "tokio",
+]
+
+[[package]]
 name = "potato-policy"
 version = "0.0.0"
 

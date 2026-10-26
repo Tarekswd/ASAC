@@ -447,6 +447,16 @@ Kept so the "research as we go" improvements and their sources stay auditable. E
   tier of Phase 0 is now fully verified end-to-end.
 - Shadow remains scripted-but-not-run (needs a sudo build; WSL2 support unverified).
 
+### 2026-10-26 (Phase 0 benchmark harness)
+- Added `crates/potato-bench`: a SOCKS5 benchmark measuring connect/circuit-setup time, TTFB, total fetch time,
+  and throughput; point `--proxy` at vanilla Arti's SOCKS (baseline), a chutney client port, or Potato later.
+  Dependency-light (tokio + anyhow), SOCKS5 encoder unit-tested (2 tests pass) [verified: `cargo test`].
+- Live-validated end to end against real Tor via the system daemon on 127.0.0.1:9050: 3/3 fetches of
+  example.com succeeded, median TTFB ~228 ms [verified: run output]. Circuit-build time is left to Arti's
+  own stats (PLAN.md 6), and throughput is only meaningful for a large download (guarded against tiny-response
+  divide-by-zero) — documented in the crate README.
+- Clippy is not installed in the local WSL toolchain (rustup `--profile minimal`); CI installs it.
+
 ### Open items to research in upcoming phases
 - Phase 0: confirm `chutney` is still the current Tor test-network tool, and whether Shadow runs Arti directly
   **(unverified)**.
