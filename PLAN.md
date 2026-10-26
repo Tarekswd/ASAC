@@ -456,6 +456,11 @@ Kept so the "research as we go" improvements and their sources stay auditable. E
   own stats (PLAN.md 6), and throughput is only meaningful for a large download (guarded against tiny-response
   divide-by-zero) — documented in the crate README.
 - Clippy is not installed in the local WSL toolchain (rustup `--profile minimal`); CI installs it.
+- **Vanilla-Arti baseline measured** (arti CLI v2 `proxy`, SOCKS 9150, example.com, 5 reps): median TTFB
+  **235 ms**, steady-state connect 144-409 ms; the first connect (~14.7 s) includes Arti's full bootstrap
+  [verified: run output + arti log "Sufficiently bootstrapped; proxy now functional"]. Comparable to the
+  C-tor path (median 228 ms). Throughput needs a large target; the tiny page reads 0.0 by the guard. This is
+  the Phase 0 baseline the gate asks for; Shadow-side baseline still pending.
 
 ### Open items to research in upcoming phases
 - Phase 0: confirm `chutney` is still the current Tor test-network tool, and whether Shadow runs Arti directly
