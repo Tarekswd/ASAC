@@ -480,6 +480,18 @@ Kept so the "research as we go" improvements and their sources stay auditable. E
   *gate*: the baseline measured **inside Shadow** (a tornettools-generated Tor-network simulation), now
   unblocked — a scaled measurement run, not a tooling gap.
 
+### 2026-10-26 (Phase 0 complete: in-Shadow baseline measured)
+- Built `tgen` from source and ran Shadow's Simple Tor Network example: a full simulated Tor network (authority
+  + 4 relays + 2 exits + tor client) completed 30 sim-minutes in ~28 s real, 20 client streams succeeded; a
+  1 MiB download over the simulated Tor path gave TTFB ~800 ms, last-byte ~2.1 s [verified: run output,
+  "Shadow completed successfully"]. Self-consistent in-Shadow baseline (fixed 50 ms-latency topology; not
+  directly comparable to live numbers).
+- **Phase 0 gate satisfied**: baseline measured both in Shadow (above) and on the live network (vanilla Arti,
+  235 ms median TTFB). Caveat: the in-Shadow run uses C tor (the standard Shadow example); measuring Arti
+  specifically inside Shadow is a follow-up refinement, not a Phase 0 blocker.
+- **Phase 0 is complete.** Deliverables: Rust workspace on Arti, two-tier test network (chutney + Shadow, both
+  verified running), benchmark harness + both baselines, and the standalone threat model.
+
 ### Open items to research in upcoming phases
 - Phase 0: confirm `chutney` is still the current Tor test-network tool, and whether Shadow runs Arti directly
   **(unverified)**.

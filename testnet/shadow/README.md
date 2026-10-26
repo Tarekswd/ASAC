@@ -15,6 +15,12 @@ Shadow 3.3.0
 hello-from-shadow        # the simulated host executed /bin/echo
 ```
 
+The upstream **Simple Tor Network** example (`~/shadow/examples/docs/tor/`, needs `tgen` built from source +
+the system `tor`) also runs green here: a full simulated Tor network (authority + 4 relays + 2 exits + a tor
+client) completed 30 simulated minutes in ~28 s real, with 20 successful client streams. A 1 MiB download over
+the simulated Tor path measured TTFB ~800 ms and last-byte ~2.1 s — a self-consistent in-Shadow baseline (the
+topology uses a fixed 50 ms link latency, so it is not directly comparable to live-network numbers).
+
 ## Why this is not auto-installed by the setup scripts
 
 Shadow builds from source and needs system development packages (installed with `sudo`), which this project's
