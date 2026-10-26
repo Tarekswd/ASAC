@@ -505,6 +505,17 @@ Kept so the "research as we go" improvements and their sources stay auditable. E
   on Arti's defaults. Strict stream isolation is driven by the SOCKS client (Tor Browser isolates by
   first-party automatically). The fingerprint and page-load gates still stand.
 
+### 2026-10-26 (Phase 1 Balanced vs baseline measurement)
+- Benchmarked example.com through the Balanced proxy (SOCKS 9150): median TTFB ~480 ms over 5 reps
+  [verified: run], versus vanilla Arti's ~235 ms [verified: earlier run]. **Balanced was not faster.** This
+  matches the scope finding: the latency wins (Conflux, Vegas tuning) are not client-config-exposed, while
+  vanguards-lite + full padding add cost. Caveat: n=5 on the live network is high-variance and the page is
+  tiny, so this is directional only — a rigorous comparison belongs in Shadow with many reps.
+- **Consequence:** the Phase 1 gate "lower median/p90 page-load than baseline" is not achievable by
+  configuration alone. Realistic options: (a) treat Balanced as "Tor-equivalent privacy, not faster" and drop
+  the speed gate; (b) pursue upstream Arti support for client-controlled Conflux/Vegas before claiming a speed
+  win. Decision pending.
+
 ### Open items to research in upcoming phases
 - Phase 0: confirm `chutney` is still the current Tor test-network tool, and whether Shadow runs Arti directly
   **(unverified)**.
