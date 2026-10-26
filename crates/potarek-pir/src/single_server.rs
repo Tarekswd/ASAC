@@ -1,14 +1,32 @@
-//! Single-server sublinear PIR, PIANO-style (Zhou et al., IEEE S&P 2024) — **milestone M1** (see
-//! `docs/PIR-RESEARCH.md`): the *recovery mechanism* only. It demonstrates PIANO's core trick — preprocess XOR
-//! "equations" over √n chunks, then recover a record by asking the server for one equation with the wanted
-//! index **replaced** by a same-chunk entry, and subtracting.
+//! Single-server sublinear PIR, PIANO-style (Zhou et al., IEEE S&P 2024) — **milestone M2** (see
+//! `docs/PIR-RESEARCH.md`), superseding M1's correctness-only version.
 //!
-//! **M1 is NOT yet private.** For correctness we use deterministic "diagonal" equations and no permutation or
-//! refresh, so the indices the server sees are structured, not random. The privacy machinery — random
-//! seed-generated equations, per-query refresh with backup equations, and a shared-seed DB permutation — is
-//! milestones M2/M3. This module exists to get the arithmetic provably right first.
+//! M2 adds the privacy *mechanism*: equations are generated from random seeds (not the fixed diagonal), and
+//! after each query the consumed equation is **refreshed** from a backup "conditioned on containing the queried
+//! index" so the remaining pool's distribution is not skewed. Each equation and replacement is used at most
+//! once. This supports a batch of up to ~sqrt(n) queries per preprocessing.
 //!
-//! Group operation is XOR over fixed-width records. `n` must be a perfect square and √n >= 2.
+//! What M2 is NOT (that is M3): a *proof* that the refresh yields exactly the right conditional distribution,
+//! and the shared-seed database permutation that makes adaptive (data-dependent) queries look uniform. So M2
+//! is "the private-scheme machinery, correct and single-use", not yet a formally argued guarantee.
+//!
+//! Group operation is XOR over fixed-width records. `n` must be a perfect square and sqrt(n) >= 2.
+//!
+//! shortcut: offsets come from a non-cryptographic PRG (splitmix64); production needs a CSPRF, and the server
+//! must permute the database under a shared seed (M3) before this is private against adaptive queries.
+
+/// splitmix64 finalizer — a fast, decent-quality mixer used here as a stand-in PRG (NOT cryptographic).
+fn mix(seed: u64) -> u64 {
+    let mut z = seed.wrapping_add(0x9E37_79B9_7F4A_7C15);
+    z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+    z ^ (z >> 31)
+}
+
+/// The offset chosen within `chunk` by an equation with the given `seed`, in `[0, sqrt_n)`.
+fn offset(seed: u64, chunk: usize, sqrt_n: usize) -> usize {
+    (mix(seed ^ (chunk as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15)) % sqrt_n as u64) as usize
+}
 
 /// A database of fixed-width records (padded with zero bytes). `n` must be a perfect square.
 pub struct SingleServerDb {
@@ -22,7 +40,7 @@ impl SingleServerDb {
         let n = records.len();
         let sqrt_n = (n as f64).sqrt().round() as usize;
         assert_eq!(sqrt_n * sqrt_n, n, "record count must be a perfect square");
-        assert!(sqrt_n >= 2, "need at least 2x2 records for a replacement to exist");
+        assert!(sqrt_n >= 2, "need sqrt(n) >= 2");
         let width = records.iter().map(Vec::len).max().unwrap_or(0);
         let rows = records
             .iter()
@@ -46,9 +64,8 @@ impl SingleServerDb {
     }
 }
 
-/// The single server. Its only operation is to XOR the records at a set of indices — it never stores or
-/// learns which record the client ultimately wants (in the full scheme those indices are random; in M1 they
-/// are structured, hence M1 is correctness-only).
+/// The single server: XOR the records at the given indices. It never learns which record the client wants
+/// (one random-looking index per chunk).
 pub struct Server<'a> {
     db: &'a SingleServerDb,
 }
@@ -58,126 +75,203 @@ impl<'a> Server<'a> {
         Self { db }
     }
 
-    /// Return the XOR of the records at `indices` (one index per chunk in the full scheme).
     pub fn answer(&self, indices: &[usize]) -> Vec<u8> {
         self.db.xor_at(indices)
     }
 }
 
-/// One preprocessed equation: an offset per chunk, and the XOR of the selected records.
-struct Equation {
-    offsets: Vec<usize>, // length sqrt_n; selected index in chunk c is c*sqrt_n + offsets[c]
-    parity: Vec<u8>,
+/// How many hints to preprocess. Over-provisioned for the prototype; PIANO sizes these by a balls-into-bins
+/// argument (O(sqrt(n)) primaries, O(log n) backups/replacements per chunk).
+#[derive(Debug, Clone, Copy)]
+pub struct Params {
+    pub primaries: usize,
+    pub backups_per_chunk: usize,
+    pub replacements_per_chunk: usize,
 }
 
-/// Client hints produced by preprocessing. Holds the equations and a couple of replacement entries per chunk;
-/// the database itself is dropped after preprocessing.
-pub struct ClientHints {
+impl Params {
+    /// Generous defaults that make a batch of sqrt(n) queries succeed with very high probability.
+    pub fn for_sqrt_n(s: usize) -> Self {
+        Self { primaries: 8 * s, backups_per_chunk: s, replacements_per_chunk: s }
+    }
+}
+
+struct Equation {
+    offsets: Vec<usize>,
+    parity: Vec<u8>,
+    consumed: bool,
+}
+
+struct Backup {
+    offsets: Vec<usize>,      // entry at the hole chunk is unused
+    parity_without_hole: Vec<u8>,
+    consumed: bool,
+}
+
+struct Replacement {
+    index: usize,
+    value: Vec<u8>,
+    consumed: bool,
+}
+
+/// Client state after preprocessing. The database is dropped; only these sublinear hints remain. Mutable
+/// because querying consumes and refreshes hints.
+pub struct ClientState {
     sqrt_n: usize,
     equations: Vec<Equation>,
-    /// replacements[chunk] = a few (global_index, value) pairs the client keeps, to substitute for the wanted
-    /// index within the same chunk.
-    replacements: Vec<Vec<(usize, Vec<u8>)>>,
+    backups: Vec<Vec<Backup>>,       // backups[chunk] -> backups with their hole in `chunk`
+    replacements: Vec<Vec<Replacement>>,
 }
 
-/// Preprocess the database into client hints. M1 uses √n deterministic "diagonal" equations (equation j selects
-/// offset j in every chunk), which guarantees every (chunk, offset) is covered so recovery always succeeds.
-/// shortcut: diagonal equations are not random, so M1 provides correctness, not privacy; M2 swaps in
-/// seed-generated random equations behind this same interface.
-pub fn preprocess(db: &SingleServerDb) -> ClientHints {
+/// Preprocess the database into client hints using `master_seed` for all randomness.
+pub fn preprocess(db: &SingleServerDb, params: Params, master_seed: u64) -> ClientState {
     let s = db.sqrt_n;
-    let equations = (0..s)
-        .map(|j| {
-            let offsets = vec![j; s];
+
+    let equations = (0..params.primaries)
+        .map(|k| {
+            let seed = mix(master_seed ^ k as u64);
+            let offsets: Vec<usize> = (0..s).map(|c| offset(seed, c, s)).collect();
             let indices: Vec<usize> = (0..s).map(|c| c * s + offsets[c]).collect();
-            Equation { offsets, parity: db.xor_at(&indices) }
+            Equation { offsets, parity: db.xor_at(&indices), consumed: false }
         })
         .collect();
 
-    // Keep offsets 0 and 1 of each chunk as replacement entries (values known to the client).
+    let backups = (0..s)
+        .map(|hole| {
+            (0..params.backups_per_chunk)
+                .map(|k| {
+                    let seed = mix(master_seed ^ 0xB0_0000 ^ ((hole * 4096 + k) as u64));
+                    let offsets: Vec<usize> =
+                        (0..s).map(|c| if c == hole { 0 } else { offset(seed, c, s) }).collect();
+                    let indices: Vec<usize> =
+                        (0..s).filter(|&c| c != hole).map(|c| c * s + offsets[c]).collect();
+                    Backup { offsets, parity_without_hole: db.xor_at(&indices), consumed: false }
+                })
+                .collect()
+        })
+        .collect();
+
+    // Keep `replacements_per_chunk` distinct offsets per chunk (their values are known to the client).
     let replacements = (0..s)
         .map(|c| {
-            vec![
-                (c * s, db.rows[c * s].clone()),
-                (c * s + 1, db.rows[c * s + 1].clone()),
-            ]
+            (0..params.replacements_per_chunk.min(s))
+                .map(|off| Replacement { index: c * s + off, value: db.rows[c * s + off].clone(), consumed: false })
+                .collect()
         })
         .collect();
 
-    ClientHints { sqrt_n: s, equations, replacements }
+    ClientState { sqrt_n: s, equations, backups, replacements }
 }
 
-/// Privately fetch record `i` using the hints and one server round-trip. Returns the recovered record (padded).
-pub fn query(hints: &ClientHints, i: usize, server: &Server) -> Vec<u8> {
-    let s = hints.sqrt_n;
+/// Privately fetch record `i`: one server round-trip, then refresh the consumed hints. Panics only if the
+/// prototype runs out of provisioned hints (raise [`Params`] if so).
+pub fn query(state: &mut ClientState, i: usize, server: &Server) -> Vec<u8> {
+    let s = state.sqrt_n;
     let chunk = i / s;
-    let offset = i % s;
+    let off = i % s;
 
-    // Find a stored equation that selects index i (offset `offset` in `chunk`).
-    let eq = hints
+    // 1. Consume a primary equation that selects index i.
+    let pos = state
         .equations
         .iter()
-        .find(|e| e.offsets[chunk] == offset)
-        .expect("M1 diagonal equations cover every (chunk, offset)");
+        .position(|e| !e.consumed && e.offsets[chunk] == off)
+        .expect("no unconsumed equation covers i; raise Params.primaries");
+    let offsets = state.equations[pos].offsets.clone();
+    let parity = state.equations[pos].parity.clone();
+    state.equations[pos].consumed = true;
 
-    // Pick a replacement entry in the same chunk, distinct from i.
-    let (r_idx, r_val) = hints.replacements[chunk]
+    // 2. Consume a replacement in this chunk, distinct from i.
+    let rpos = state.replacements[chunk]
         .iter()
-        .find(|(idx, _)| *idx != i)
-        .expect("each chunk keeps two replacements, so one differs from i");
+        .position(|r| !r.consumed && r.index != i)
+        .expect("no unconsumed replacement != i; raise Params.replacements_per_chunk");
+    let r_index = state.replacements[chunk][rpos].index;
+    let r_value = state.replacements[chunk][rpos].value.clone();
+    state.replacements[chunk][rpos].consumed = true;
 
-    // Build the indices to send: the equation's selection, with chunk `chunk` swapped to the replacement.
-    let indices: Vec<usize> = (0..s)
-        .map(|c| if c == chunk { *r_idx } else { c * s + eq.offsets[c] })
-        .collect();
-
+    // 3. Ask the server for the equation with i swapped for the replacement (server sees one index per chunk).
+    let indices: Vec<usize> =
+        (0..s).map(|c| if c == chunk { r_index } else { c * s + offsets[c] }).collect();
     let y_prime = server.answer(&indices);
 
-    // X_i = parity XOR y_prime XOR X_r  (parity has X_i; y_prime has X_r in its place).
-    eq.parity
+    // 4. Recover: X_i = parity XOR y' XOR X_r.
+    let xi: Vec<u8> = parity
         .iter()
         .zip(&y_prime)
-        .zip(r_val)
+        .zip(&r_value)
         .map(|((&p, &y), &r)| p ^ y ^ r)
-        .collect()
+        .collect();
+
+    // 5. Refresh: turn a backup (hole in this chunk) into a fresh equation that contains i, using the X_i we
+    //    just learned. This keeps the pool's size and distribution rather than skewing it.
+    if let Some(bpos) = state.backups[chunk].iter().position(|b| !b.consumed) {
+        let mut new_offsets = state.backups[chunk][bpos].offsets.clone();
+        let base = state.backups[chunk][bpos].parity_without_hole.clone();
+        state.backups[chunk][bpos].consumed = true;
+        new_offsets[chunk] = off;
+        let new_parity: Vec<u8> = base.iter().zip(&xi).map(|(&a, &b)| a ^ b).collect();
+        state.equations.push(Equation { offsets: new_offsets, parity: new_parity, consumed: false });
+    }
+
+    xi
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn db16() -> SingleServerDb {
-        let records: Vec<Vec<u8>> = (0..16).map(|k| format!("record-{k:02}").into_bytes()).collect();
+    fn db(n: usize) -> SingleServerDb {
+        let records: Vec<Vec<u8>> = (0..n).map(|k| format!("record-{k:03}").into_bytes()).collect();
         SingleServerDb::from_records(&records)
     }
 
+    fn want(i: usize, width: usize) -> Vec<u8> {
+        let mut w = format!("record-{i:03}").into_bytes();
+        w.resize(width, 0);
+        w
+    }
+
     #[test]
-    fn recovers_every_record() {
-        let db = db16();
-        let hints = preprocess(&db);
+    fn batch_of_distinct_queries_all_correct() {
+        let db = db(16);
+        let s = 4;
+        let mut state = preprocess(&db, Params::for_sqrt_n(s), 0xDEAD_BEEF);
         let server = Server::new(&db);
-        for i in 0..16 {
-            let got = query(&hints, i, &server);
-            let mut want = format!("record-{i:02}").into_bytes();
-            want.resize(got.len(), 0);
-            assert_eq!(got, want, "record {i} mismatch");
+        // includes two queries in the same chunk (0 and 1) to exercise refresh + repeated consumption.
+        for &i in &[0usize, 1, 5, 10, 15] {
+            let got = query(&mut state, i, &server);
+            assert_eq!(got, want(i, got.len()), "record {i}");
         }
     }
 
     #[test]
-    fn server_only_ever_sees_sqrt_n_indices() {
-        // The server's answer takes exactly one index per chunk (√n total) — the shape that will carry the
-        // privacy guarantee once M3 randomises them.
-        let db = db16();
-        let hints = preprocess(&db);
-        let s = hints.sqrt_n;
-        let chunk = 2usize;
-        let i = chunk * s + 1;
-        // Rebuild the indices the query would send and check their count.
-        let eq = hints.equations.iter().find(|e| e.offsets[chunk] == i % s).unwrap();
-        let (r_idx, _) = hints.replacements[chunk].iter().find(|(idx, _)| *idx != i).unwrap();
-        let indices: Vec<usize> =
-            (0..s).map(|c| if c == chunk { *r_idx } else { c * s + eq.offsets[c] }).collect();
-        assert_eq!(indices.len(), s);
+    fn query_refreshes_an_equation_containing_i() {
+        let db = db(16);
+        let mut state = preprocess(&db, Params::for_sqrt_n(4), 1);
+        let server = Server::new(&db);
+        let i = 6usize; // chunk 1, offset 2
+        let before = state.equations.len();
+        let _ = query(&mut state, i, &server);
+        // A fresh, unconsumed equation that selects i exists (the refreshed one).
+        let refreshed = state
+            .equations
+            .iter()
+            .any(|e| !e.consumed && e.offsets[i / 4] == i % 4);
+        assert!(refreshed, "refresh must leave an equation covering i");
+        assert_eq!(state.equations.len(), before + 1, "refresh adds one equation");
+    }
+
+    #[test]
+    fn each_equation_used_at_most_once() {
+        // After a batch, the number of consumed primaries equals the number of queries (no double-spend).
+        let db = db(16);
+        let mut state = preprocess(&db, Params::for_sqrt_n(4), 99);
+        let server = Server::new(&db);
+        let batch = [2usize, 7, 8, 13];
+        for &i in &batch {
+            let _ = query(&mut state, i, &server);
+        }
+        let consumed = state.equations.iter().filter(|e| e.consumed).count();
+        assert_eq!(consumed, batch.len());
     }
 }

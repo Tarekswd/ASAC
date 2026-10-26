@@ -45,10 +45,12 @@ the next preprocessing underneath.
 
 - **M1 — recovery math (static DB, correctness only).** Preprocessing equations + replacement subtraction over
   XOR; recover every record correctly. **Not yet private** (coverage is deterministic, no permutation/refresh).
-  Gate: for all i, recovered == DB[i]. *(Starting now.)*
+  Gate: for all i, recovered == DB[i]. **Done, then superseded by M2** in `single_server.rs`.
 - **M2 — random equations + multi-query refresh.** Seed-generated random equations; backup equations to refresh
   a consumed equation "conditioned on containing i"; support √n queries per preprocessing. Gate: √n queries all
-  correct; no equation/replacement reused.
+  correct; no equation/replacement reused. **Done (2026-10-26):** implemented in `single_server.rs`; tests cover
+  a mixed batch (incl. two queries in one chunk), refresh leaving an equation that still covers i, and no
+  double-spend; clippy clean under -D warnings.
 - **M3 — adaptive-query privacy.** DB permutation via a shared seed so queries look random; write down the
   privacy argument; note malicious-server affects correctness not privacy. Gate: a statistical test that the
   server's per-query indices are ~uniform per chunk and independent of the true index.
