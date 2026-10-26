@@ -6,6 +6,7 @@ members = [
     "crates/potato-policy",
     "crates/potarek-decoy",
     "crates/potato-bench",
+    "crates/potarek-pir",
 ]
 
 [workspace.package]

@@ -12,7 +12,9 @@ potarek/
 ├── crates/
 │   ├── potato/             # binary: client entry point + connectivity (Phase 0/1)
 │   ├── potato-policy/      # lib: routing Modes + privacy-over-latency policy (PLAN 2.2, 3.3, 3.7)
-│   └── potarek-decoy/      # lib: client-side decoy-query generator (PLAN 4.3 item 7)
+│   ├── potato-bench/       # bin: SOCKS5 benchmark (connect/TTFB/throughput) (PLAN 6)
+│   ├── potarek-decoy/      # lib: client-side decoy-query generator (PLAN 4.3 item 7)
+│   └── potarek-pir/        # lib: private information retrieval for trustless query privacy (PLAN 4.4)
 └── docs/
 ```
 
@@ -22,7 +24,9 @@ potarek/
 |-------|------|----------------|----------|--------|
 | `potato` | bin | Bootstrap a Tor client via `arti-client`; smoke-test connectivity. SOCKS proxy is Arti's `arti proxy` for now. | 3, 5 (Phase 0/1) | skeleton |
 | `potato-policy` | lib | `Mode` enum (Swift/Balanced/Fortress) and the rules each mode implies. | 2.2 | real, tested |
+| `potato-bench` | bin | SOCKS5 benchmark: connect/TTFB/total/throughput through any proxy. | 6 | real, tested + live |
 | `potarek-decoy` | lib | Generate benign decoy queries from a caller-supplied vetted term list. | 4.3 | real, tested |
+| `potarek-pir` | lib | PIR so the server can't learn the query. First scheme: trivial PIR (server sends whole small index). | 4.4 | real, tested |
 
 ## Crates planned (not yet created)
 

@@ -2545,6 +2545,10 @@ name = "potarek-decoy"
 version = "0.0.0"
 
 [[package]]
+name = "potarek-pir"
+version = "0.0.0"
+
+[[package]]
 name = "potato"
 version = "0.0.0"
 dependencies = [
