@@ -514,7 +514,11 @@ Kept so the "research as we go" improvements and their sources stay auditable. E
 - **Consequence:** the Phase 1 gate "lower median/p90 page-load than baseline" is not achievable by
   configuration alone. Realistic options: (a) treat Balanced as "Tor-equivalent privacy, not faster" and drop
   the speed gate; (b) pursue upstream Arti support for client-controlled Conflux/Vegas before claiming a speed
-  win. Decision pending.
+  win.
+- **Decision (2026-10-26): option (a) — privacy over speed.** Balanced is "Tor-equivalent privacy with
+  vanguards-lite on"; the Phase 1 "faster than baseline" speed gate is dropped. Conflux/Vegas latency work, if
+  pursued, goes upstream to Arti, never claimed as a Potato speed win. Phase 1's remaining item is the
+  wire-fingerprint check (Balanced must stay indistinguishable from stock Arti).
 
 ### Open items to research in upcoming phases
 - Phase 0: confirm `chutney` is still the current Tor test-network tool, and whether Shadow runs Arti directly
