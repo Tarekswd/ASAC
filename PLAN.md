@@ -232,6 +232,15 @@ user (Tor Browser / Potato client)
 1. **Crawler**: Rust, using the `arti-client` crate (exists, `ls arti/crates`).
    - Separate circuits per target onion service (stream isolation), polite rate limits, respects `robots.txt`.
    - Fetches HTML and text only. Never runs JavaScript. Never downloads media.
+   - **Clear-web crawling (the optional path in 4.1) uses Scrapling**, a Python web-scraping framework
+     [verified: github.com/D4Vinci/Scrapling], routed through a Potato/Tor SOCKS proxy. **Hard constraints,
+     because several of Scrapling's headline features fight this project's goals:** use only its plain HTTP
+     fetcher and HTML parser — JavaScript rendering **off**, stealth browsers **off**, anti-bot / CAPTCHA
+     bypass **off**, residential-IP features **off** [verified: those features documented in the Scrapling
+     README]. Those exist to evade bot protection and defeat `robots.txt`; crawling here stays polite and
+     robots-respecting. Onion services keep the Rust `arti-client` path above — Scrapling's browser mode is
+     unnecessary there and a JavaScript/fingerprinting risk the plan forbids (2.3, 3.9). Python is allowed by
+     2.3 (only PHP and JavaScript are banned); this is the one place the stack is not Rust.
 2. **Content safety filter, before indexing (required, not optional).**
    - Hash-match against known-illegal-content lists through an industry partner, keyword and classifier
      filters, and a manual abuse-report process. Existing onion search engines keep blocklists **(unverified)**.
@@ -389,6 +398,8 @@ Kept so the "research as we go" improvements and their sources stay auditable. E
 - Policy added: privacy beats latency (section 0); non-goals recorded (2.3) — no PHP/JavaScript, no
   PostgreSQL-source fork, no hand-written C/asm; optional client-side decoy queries (4.3); and the explicit
   no-local-surveillance-detection stance (3.10).
+- Tooling decision: clear-web scraping uses Scrapling [verified: github.com/D4Vinci/Scrapling], restricted to its
+  plain HTTP fetcher over Tor with JS rendering and all anti-bot/stealth/CAPTCHA-bypass features off (4.3 #1).
 
 ### Open items to research in upcoming phases
 - Phase 0: confirm `chutney` is still the current Tor test-network tool, and whether Shadow runs Arti directly
