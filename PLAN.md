@@ -520,6 +520,16 @@ Kept so the "research as we go" improvements and their sources stay auditable. E
   pursued, goes upstream to Arti, never claimed as a Potato speed win. Phase 1's remaining item is the
   wire-fingerprint check (Balanced must stay indistinguishable from stock Arti).
 
+### 2026-10-26 (Phase 1 complete: wire-fingerprint check)
+- Fingerprint check done by config-equivalence (`docs/FINGERPRINT.md`): Potato Balanced is the stock `arti`
+  binary + `balanced.toml`, and every config value equals Arti 2.7.0's default [verified: arti-example-config
+  .toml], so Balanced is wire-indistinguishable from stock Arti. Dropped the one deviation
+  (`min_exit_circs_for_port` 3 to 2). An empirical cell-trace comparison is deferred to the Phase 3 Shadow work.
+- **Phase 1 complete.** Balanced client = a stock-Arti-equivalent privacy posture over Arti's SOCKS proxy
+  (vanguards-lite, full padding, standard rotation), pinned explicitly; speed gate dropped (privacy over speed).
+  Deliverables: `potato-policy` modes, `balanced.toml` + run script (verified bootstrapping on 9150), the
+  Balanced-vs-baseline benchmark, and the fingerprint analysis.
+
 ### Open items to research in upcoming phases
 - Phase 0: confirm `chutney` is still the current Tor test-network tool, and whether Shadow runs Arti directly
   **(unverified)**.

@@ -27,6 +27,9 @@ padding = "normal"
 max_dirtiness = "10 minutes"
 
 [preemptive_circuits]
-# Build a few circuits ahead of time for faster first connections (PLAN.md 3.6).
+# These equal Arti's defaults; we pin them so Balanced's posture is explicit and stable against future
+# default drift. We deliberately do NOT raise min_exit_circs_for_port above the default: a larger preemptive
+# pool is the only setting here that would make Potato observably different from stock Arti, and "look like
+# stock Arti" beats a small speed gain (PLAN.md 3.9, and privacy over speed).
 initial_predicted_ports = [80, 443]
-min_exit_circs_for_port = 3
+min_exit_circs_for_port = 2
