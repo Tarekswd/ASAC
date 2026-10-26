@@ -440,6 +440,11 @@ Kept so the "research as we go" improvements and their sources stay auditable. E
   clients can stall at 95% "Establishing a Tor circuit" under WSL + tor 0.4.9.11 within the wait window. Raised
   the wait to `CHUTNEY_START_TIME=180` in `run-chutney.sh`; the newer tor 0.4.9.14 converged further. Documented
   with mitigations in `testnet/README.md`.
+- **Resolved with tor 0.4.9.14** (official Tor apt repo): a full run is green on WSL2 + Python 3.12 —
+  "Everything bootstrapped after 52 sec", `BOOTSTRAP_OK`, `Transmission: Success`, `BOOTSTRAP_RC=0 VERIFY_RC=0`
+  [verified: run output]. Correction to the earlier note: the byte self-test is NOT broken by the pyasyncore
+  backport; it failed only because the old tor had not fully bootstrapped (no circuits -> no traffic). chutney
+  tier of Phase 0 is now fully verified end-to-end.
 - Shadow remains scripted-but-not-run (needs a sudo build; WSL2 support unverified).
 
 ### Open items to research in upcoming phases

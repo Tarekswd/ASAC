@@ -34,40 +34,29 @@ from scratch.)
 
 The chutney clone and generated network state are git-ignored.
 
-### Known limitation: the byte-transfer self-test on Python 3.12
+### Verified result
 
-The harness's success criterion is **bootstrap** — a private Tor network that forms circuits, which is what
-Phase 0 needs. chutney also has an optional data-transmission self-test (`chutney verify`) that pushes bytes
-exit-to-client through its own traffic generator. That generator imports `asyncore`/`asynchat`, removed from
-the Python standard library in 3.12. `setup-chutney.sh` installs the `pyasyncore`/`pyasynchat` backports so
-chutney *runs*, but the backport does not drive the event loop to completion on 3.12, so the byte self-test
-times out even though circuits are fine (verified: tasks stay "not done" with `failure_count == 0`).
+With tor **0.4.9.14** (from the official Tor apt repo), a full run is green on WSL2 + Python 3.12:
 
-This is an upstream chutney/Python-3.12 issue, not a problem with the network. To run the self-test too, use a
-Python with a real `asyncore` (<= 3.11), for example:
-
-```sh
-sudo apt-get install -y python3.11 python3.11-venv   # or pyenv
-python3.11 -m venv ~/.chutney-venv && ~/.chutney-venv/bin/python -m pip install --upgrade pip
-# then run chutney with ~/.chutney-venv/bin/python on PATH
+```text
+tor: /usr/sbin/tor (Tor version 0.4.9.14.)
+Everything bootstrapped after 52 sec
+BOOTSTRAP_OK: private Tor network is up and forming circuits
+Transmission: Success
+BOOTSTRAP_RC=0 VERIFY_RC=0
 ```
 
-### Known flakiness: last-5% bootstrap under WSL + tor 0.4.9.11
+Both the bootstrap and chutney's byte-transfer self-test pass. The `pyasyncore`/`pyasynchat` backports that
+`setup-chutney.sh` installs are enough for the self-test on Python 3.12 — it passes once the network has fully
+bootstrapped.
 
-Observed this session with the Ubuntu `tor` 0.4.9.11 package in WSL2: the directory **authorities reach 100%
-and publish a full consensus** (all nodes, `desc md md_cons ns_cons`, "Dir info cached"), but the relays and
-clients can stall at **95%, "Establishing a Tor circuit"** within the wait window, so `wait_for_bootstrap`
-reports failure even though the network is substantially up (verified: authorities 100%, consensus distributed;
-the Tor Expert Bundle's newer tor 0.4.9.14 got further in earlier runs).
+### Use the official-repo tor (0.4.9.14+), not the distro package
 
-`run-chutney.sh` already raises the wait to `CHUTNEY_START_TIME=180`. If you hit this, options in order of
-preference:
-
-- Install the current stable `tor` (0.4.9.14+) from the official repo instead of the distro package:
-  <https://support.torproject.org/apt/> — the newer tor converged further here.
-- Increase the window further: `CHUTNEY_START_TIME=300 ./run-chutney.sh`.
-- For development you often do not need 100% of all nodes: once the authorities publish a consensus, you can
-  point Arti/Potato at the network and build your own circuits.
+The Ubuntu `tor` 0.4.9.11 package converged slowly under WSL: authorities reached 100% and published a full
+consensus, but relays/clients could stall at 95% "Establishing a Tor circuit" within the wait window. The
+current stable tor from the official repo bootstraps fully (52 s above). Install it from
+<https://support.torproject.org/apt/>. `run-chutney.sh` also raises the wait to `CHUTNEY_START_TIME=180`
+(override with a larger value if your machine is slow).
 
 ## Shadow (scaled simulation)
 
