@@ -401,6 +401,17 @@ Kept so the "research as we go" improvements and their sources stay auditable. E
 - Tooling decision: clear-web scraping uses Scrapling [verified: github.com/D4Vinci/Scrapling], restricted to its
   plain HTTP fetcher over Tor with JS rendering and all anti-bot/stealth/CAPTCHA-bypass features off (4.3 #1).
 
+### 2026-10-26 (Phase 0 kickoff)
+- Created the Rust workspace with the `potato` binary crate depending on `arti-client` pinned at `=0.47.0`
+  [verified: crates.io], and a connectivity smoke test written against the verified 0.47 API
+  [verified: docs.rs/arti-client 0.47.0]. Manifests validated offline [verified: `cargo verify-project`].
+- **Toolchain blocker found:** Arti 0.47 crates require **Rust 1.92** [verified: `cargo generate-lockfile`
+  output], but the build host has a standalone Rust 1.89.0 with no rustup, so it cannot compile here yet.
+  Pinned the requirement in `rust-toolchain.toml`; building needs Rust >= 1.92 (install via rustup).
+- Confirmed `tor-socksproto v0.47.0` is in the dependency tree [verified: lockfile], the crate Phase 1 reuses
+  for the SOCKS proxy. Note: `arti-client` has no embeddable SOCKS API yet, so the proxy is Arti's own
+  `arti proxy` binary for now [verified: docs.rs/arti-client].
+
 ### Open items to research in upcoming phases
 - Phase 0: confirm `chutney` is still the current Tor test-network tool, and whether Shadow runs Arti directly
   **(unverified)**.

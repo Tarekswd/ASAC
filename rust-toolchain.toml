@@ -1,0 +1,4 @@
+# Arti 0.47 crates require Rust 1.92 (verified via `cargo generate-lockfile`, 2026-10-26).
+# With rustup installed, this pins the toolchain automatically.
+[toolchain]
+channel = "1.92"
