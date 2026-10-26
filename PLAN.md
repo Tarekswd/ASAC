@@ -471,6 +471,15 @@ Kept so the "research as we go" improvements and their sources stay auditable. E
   backports, and cargo-deny/fuzz/audit. Only `libc-dbg` (a Shadow dep) may still be missing; the Shadow build
   will confirm.
 
+### 2026-10-26 (Shadow verified running)
+- Built Shadow 3.3.0 from source and ran a minimal simulation on WSL2 (kernel 6.6): "Running/Finished
+  simulation", and the simulated host executed and printed output [verified: run output, SHADOW_RC=0]. No
+  kernel tuning and no `libc-dbg` needed on Ubuntu 24.04. Both test-network tiers (chutney + Shadow) now work.
+- Phase 0 deliverables complete: Rust workspace, test network (chutney green + Shadow running), benchmark
+  harness + live Arti baseline (235 ms median TTFB), and the standalone threat model. Remaining for the Phase 0
+  *gate*: the baseline measured **inside Shadow** (a tornettools-generated Tor-network simulation), now
+  unblocked — a scaled measurement run, not a tooling gap.
+
 ### Open items to research in upcoming phases
 - Phase 0: confirm `chutney` is still the current Tor test-network tool, and whether Shadow runs Arti directly
   **(unverified)**.
