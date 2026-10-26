@@ -492,6 +492,19 @@ Kept so the "research as we go" improvements and their sources stay auditable. E
 - **Phase 0 is complete.** Deliverables: Rust workspace on Arti, two-tier test network (chutney + Shadow, both
   verified running), benchmark harness + both baselines, and the standalone threat model.
 
+### 2026-10-26 (Phase 1 kickoff: Balanced-mode config)
+- Added `crates/potato/config/balanced.toml` + `run-balanced.sh`: Balanced mode expressed as a config over
+  Arti's own SOCKS proxy (`socks_listen=9150`, `vanguards.mode="lite"`, `channel.padding="normal"`,
+  `circuit_timing.max_dirtiness="10 minutes"`, preemptive-circuit tuning), each key mapped to a PLAN section
+  and verified against arti 2.7.0's example config. Verified live: arti accepts the config and the proxy
+  bootstraps and listens on 127.0.0.1:9150 [verified: run — "Successfully reloaded configuration", "proxy now
+  functional", SOCKS on 9150].
+- **Scope correction to Phase 1:** Arti 2.7.0's client config exposes **no CGO or Conflux toggle** [verified:
+  not present in arti-example-config.toml]. CGO is negotiated per hop and Conflux is consensus-driven, so both
+  are internal; "force CGO / enable Conflux" is upstream work, not a client-config change, and Balanced relies
+  on Arti's defaults. Strict stream isolation is driven by the SOCKS client (Tor Browser isolates by
+  first-party automatically). The fingerprint and page-load gates still stand.
+
 ### Open items to research in upcoming phases
 - Phase 0: confirm `chutney` is still the current Tor test-network tool, and whether Shadow runs Arti directly
   **(unverified)**.

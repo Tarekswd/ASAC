@@ -1,0 +1,32 @@
+# Potato "Balanced" mode — the default (PLAN.md section 2.2). Privacy-first settings applied to Arti's own
+# SOCKS proxy, so Tor Browser / apps connect through it.
+#
+# Run:  arti proxy -c balanced.toml
+#
+# Scope note (verified against arti 2.7.0's arti-example-config.toml): Arti's config does NOT expose CGO or
+# Conflux toggles. CGO relay crypto is negotiated per hop and Conflux is governed by consensus parameters, so
+# both are handled internally and Balanced relies on Arti's defaults for them. Forcing/guaranteeing them would
+# be upstream work, not a client-config change. The keys below are what the client config actually exposes.
+
+[proxy]
+# SOCKS port for Tor Browser / applications.
+socks_listen = 9150
+
+[vanguards]
+# Vanguards-Lite for onion-service circuits (PLAN.md section 1: "Vanguards-Lite must be the default").
+mode = "lite"
+
+[channel]
+# Keep full channel padding on. "reduced"/"none" lower padding but increase client traceability
+# (per Arti's own config comment), and privacy beats latency here (PLAN.md section 0).
+padding = "normal"
+
+[circuit_timing]
+# Rotate the circuit used for new weakly-isolated streams after this long (PLAN.md 3.11, "route shuffling").
+# This is Tor's default; we do not shorten it, because faster rotation touches more relays and costs privacy.
+max_dirtiness = "10 minutes"
+
+[preemptive_circuits]
+# Build a few circuits ahead of time for faster first connections (PLAN.md 3.6).
+initial_predicted_ports = [80, 443]
+min_exit_circs_for_port = 3
