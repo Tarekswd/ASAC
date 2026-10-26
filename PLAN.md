@@ -14,7 +14,10 @@ Anything marked **(unverified)** comes from memory, not from the sources. Check 
    on the existing Tor network**. It only becomes its own network if a phase gate shows that is worth it (Phase 6).
 2. **"More privacy" and "lower latency" pull in opposite directions.** Every latency trick (fewer hops, routing
    by latency, multipath) leaks something. Potato therefore has **modes**: the user picks the trade-off, and each
-   mode's leak is written down, not hidden.
+   mode's leak is written down, not hidden. **Project priority (set 2026-10-26): privacy beats latency.** Every
+   latency feature is optional and gated, and none ships if it measurably weakens privacy. When the two conflict,
+   favor the more private option and leave the speed on the table. The default experience is tuned for privacy,
+   not for benchmarks.
 3. **Never write crypto from scratch.** Everything is built on Arti (Tor's Rust implementation, licensed
    `MIT OR Apache-2.0`, `crates/tor-proto/Cargo.toml:7`) and on audited libraries. Potato's new parts are
    *policy and composition*, not new primitives.
@@ -63,6 +66,10 @@ Out of scope (same as Tor; say this openly to users):
 - A global passive adversary watching both ends. Tor's low-latency design cannot stop end-to-end timing
   correlation **(unverified)**. Potato's "Fortress" mode only *reduces* the risk.
 - A compromised endpoint device or browser fingerprinting. That is the browser's job.
+- **Detecting whether someone is watching your screen, or whether spyware or monitoring software is on your
+  device.** A privacy client cannot do this reliably: if the endpoint is already compromised it can lie to us,
+  and a false "you are safe" is more dangerous than saying nothing. This is an operating-system and physical-
+  security problem, not something Potato or Potarek will claim to solve. See the note in 3.10.
 
 ### 2.2 Modes
 
@@ -71,6 +78,25 @@ Out of scope (same as Tor; say this openly to users):
 | **Swift** | 3 | Conflux MinRTT, bounded latency-aware middle choice, preemptive circuits, tuned Vegas | CGO, hybrid PQ, family rules | Latency-aware choice leaks a little about client location (bounded, see 3.3) |
 | **Balanced** (default) | 3 | Conflux, tuned Vegas, preemptive circuits | CGO, hybrid PQ, padding machines, strict stream isolation | Same as Tor plus the Conflux linking signal (prop 329, security concerns) |
 | **Fortress** | 3 + vanguards-lite | No latency-aware choice | Everything in Balanced, plus constant-rate cover traffic and timing jitter | Higher latency and bandwidth cost |
+
+Because privacy beats latency here (section 0), **Balanced is the default and Fortress is the showcase mode.**
+Swift exists only for users who knowingly accept its documented location leak, and it is the first thing cut if
+its 3.3 gate does not pass.
+
+### 2.3 Non-goals and rejected alternatives
+
+Decisions recorded so they are not re-litigated. Each is a deliberate "no", with the reason:
+
+- **No new cryptographic primitives.** Enhancement means *finishing, enabling and getting external review of*
+  what Arti already has (CGO, hybrid PQ), not inventing ciphers or handshakes. This is truth 3 restated.
+- **No forking the PostgreSQL (or any database) source to build a custom store.** The index is Tantivy, which is
+  the right tool for BM25 search (4.3). If a relational store is ever needed, depend on PostgreSQL as software,
+  never fork its source: a fork is a permanent security-patch and maintenance burden for no privacy gain.
+- **No hand-written C or assembly in Potato's own code.** Memory safety is a core privacy property here, and the
+  audited crypto libraries already use assembly internally where it matters **(unverified)**. Dropping to C or
+  asm would add memory-safety and timing-side-channel risk. Reconsider only for one measured hotspot, and only
+  behind a vetted library with constant-time guarantees.
+- **No claim to detect local surveillance of the user's device** (see 2.1 out-of-scope and 3.10).
 
 ---
 
@@ -106,6 +132,8 @@ Each item below includes: what it is, where it lives in Arti, what is new, and h
 - Check: simulate with the Shadow simulator (prop 329 also tunes its schedulers with Shadow), then measure
   (a) the latency gain and (b) the attacker's location-guessing advantage. **Gate: if (b) is not small, Swift
   mode ships without this feature.**
+- **Priority note:** given section 0, this feature is deprioritized. It is the most privacy-risky item in the
+  plan and buys only latency, which we have said we do not need. Treat it as optional and expect it to be cut.
 
 ### 3.4 Multipath: Conflux tuned
 - Use Arti's `crates/tor-proto/src/conflux/`.
@@ -141,6 +169,18 @@ Each item below includes: what it is, where it lives in Arti, what is new, and h
 - Every Potato feature is negotiated through Tor's subprotocol versioning (`spec/tor-spec/subprotocol-versioning.md`).
 - **Potato clients must look like normal Arti clients to relays.** A unique Potato fingerprint would shrink
   the anonymity set to "Potato users". This rule beats any feature in this plan.
+
+### 3.10 What we deliberately do not build: local-surveillance detection
+- A recurring request is "tell me if someone is watching my browser or my device." Potato does not do this, and
+  saying why is part of being honest with users.
+- If the device is already compromised, any detector running on it can be fed false data, so a "clean" result
+  means nothing. A false sense of safety is worse than none for an anonymity tool.
+- Webcam-based "is someone looking at my screen" detection would mean turning on the camera and running a face
+  detector — adding an attack surface and a privacy risk to *defend* privacy. We will not.
+- Honest guidance we can give users instead: use full-disk encryption, keep the OS patched, use the OS's own
+  "which apps used the camera/mic" indicators, a privacy screen filter against shoulder-surfing, and Tor
+  Browser's own anti-fingerprinting. These live in the user's OS and browser, not in Potato. **(unverified:
+  specific OS feature names not checked this session.)**
 
 ---
 
@@ -185,6 +225,23 @@ user (Tor Browser / Potato client)
    - v1: Potato circuits already hide the user's IP from Potarek.
    - v2 research: private information retrieval (PIR), so the server cannot see the query even in memory. Practical
      only for small indexes today **(unverified)**. Prototype on a top-N result cache first.
+7. **Decoy queries (optional, client-side, off by default).** The Potato client can mix the user's real searches
+   with random, plausible-looking decoy searches, so anyone watching query *timing and volume* cannot pick the
+   real ones out of the noise. This is a TrackMeNot / query-obfuscation style defense **(unverified)**. It is the
+   only form of "data poisoning" Potarek ships: the user poisons *their own* query stream to protect themselves,
+   never anyone else's data, index, or system.
+   - Honest limits, all of which must be documented to the user:
+     - It costs bandwidth and server load, so rate-limit it and keep crawler-style politeness. Fortress mode may
+       turn it on by default; other modes leave it off.
+     - Decoys must be drawn from a realistic query distribution, or they are trivially filtered out again
+       **(unverified)**. A fixed or obviously-synthetic word list defeats the purpose.
+     - It adds **nothing** against Potarek itself, which keeps no query logs (item 6). Its value is against a
+       network observer, or a future compromise of a server that was supposed to be log-free.
+     - Decoys must be drawn only from a vetted, benign term list and must never issue searches that could cause
+       real-world harm (illegal, harassing, or dangerous terms). This constraint is part of the feature, not an
+       afterthought.
+   - Check: a statistical test that an observer cannot separate real from decoy queries above chance, given the
+     chosen decoy distribution.
 
 ---
 

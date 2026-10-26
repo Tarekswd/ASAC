@@ -19,8 +19,8 @@ These come straight from the plan and are not negotiable without a design discus
 
 1. **Never roll your own crypto.** Build on Arti and audited libraries. New work should be *policy and
    composition*, not new primitives (PLAN.md section 0.3).
-2. **Don't make Tatawek clients fingerprintable.** A unique wire fingerprint shrinks the anonymity set to
-   "Tatawek users" and hurts everyone (PLAN.md section 3.9). This rule beats any feature.
+2. **Don't make Potato clients fingerprintable.** A unique wire fingerprint shrinks the anonymity set to
+   "Potato users" and hurts everyone (PLAN.md section 3.9). This rule beats any feature.
 3. **Write down what leaks.** If a change trades privacy for latency, document the leak explicitly, the way
    the modes table does (PLAN.md section 2.2).
 4. **Measure, don't guess.** Performance and privacy claims need Shadow simulation and/or live measurement

@@ -11,7 +11,7 @@
 
 Potarek is two pieces that work together:
 
-- **Tatawek routing** — a client and protocol layer that runs *on the existing Tor network*, turning the best
+- **Potato routing** — a client and protocol layer that runs *on the existing Tor network*, turning the best
   existing Tor/Arti features (CGO relay crypto, Conflux multipath, Vegas congestion control, post-quantum
   handshakes, padding) on together, tuning them, and measuring the result. It exposes **modes** so the user
   picks the latency/privacy trade-off, and each mode's leak is written down, not hidden.
@@ -39,13 +39,17 @@ These are load-bearing, not decoration (full detail in [PLAN.md](PLAN.md)):
 | **Balanced** (default) | 3 | Tor-equivalent privacy with the best existing speedups on |
 | **Fortress** | 3 + vanguards-lite | Maximum resistance: cover traffic and timing jitter, at a bandwidth/latency cost |
 
+**Privacy beats latency.** Balanced is the default and Fortress is the showcase; Swift's latency features are
+optional, gated, and the first thing cut if they weaken privacy. An optional client-side **decoy-query** feature
+can also obscure your real searches by mixing in random ones (see PLAN.md section 4.3).
+
 ## Status and roadmap
 
 The work is phased, and each phase ends with a gate that must pass before the next starts. The first three
 concrete tasks and the full phase plan are in [PLAN.md](PLAN.md) sections 5 and 9. In short:
 
 - **Phase 0** — Rust workspace on Arti, private test network (Shadow + chutney), benchmark baseline.
-- **Phase 1** — Tatawek client, Balanced mode.
+- **Phase 1** — Potato client, Balanced mode.
 - **Phase 2** — hybrid post-quantum handshake.
 - **Phase 3+** — Swift/Fortress modes, the Potarek search engine, external audit.
 
