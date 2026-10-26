@@ -53,6 +53,27 @@ concrete tasks and the full phase plan are in [PLAN.md](PLAN.md) sections 5 and 
 - **Phase 2** — hybrid post-quantum handshake.
 - **Phase 3+** — Swift/Fortress modes, the Potarek search engine, external audit.
 
+## Building
+
+**Rust 1.92+ on Linux** (native or WSL). Arti 0.47 requires Rust 1.92, and the build is Linux-first; a
+`rust-toolchain.toml` pins the compiler if you use [rustup](https://rustup.rs).
+
+```sh
+cargo test --workspace     # build everything and run the tests
+cargo run  -p potato        # bootstrap Tor and fetch example.com over it (needs network)
+```
+
+The client uses pure-Rust **rustls** TLS and a **bundled static SQLite**, so no system OpenSSL or libsqlite3
+is needed. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the crate layout.
+
+### Workspace crates
+
+| Crate | What it is |
+|-------|------------|
+| `potato` | Client binary: bootstraps a Tor client via `arti-client`; SOCKS proxy is Arti's `arti proxy` for now. |
+| `potato-policy` | Routing modes (Swift/Balanced/Fortress) and the privacy-over-latency rules. |
+| `potarek-decoy` | Client-side decoy-query generator (self-directed query obfuscation). |
+
 ## Contributing
 
 Contributions are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) and the

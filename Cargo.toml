@@ -1,4 +1,14 @@
 # Potato/Potarek Rust workspace (Phase 0). See PLAN.md section 5.
 [workspace]
 resolver = "2"
-members = ["crates/potato"]
+members = [
+    "crates/potato",
+    "crates/potato-policy",
+    "crates/potarek-decoy",
+]
+
+[workspace.package]
+edition = "2021"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/Tarekswd/potarek"
+rust-version = "1.92"

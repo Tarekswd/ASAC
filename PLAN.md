@@ -412,6 +412,17 @@ Kept so the "research as we go" improvements and their sources stay auditable. E
   for the SOCKS proxy. Note: `arti-client` has no embeddable SOCKS API yet, so the proxy is Arti's own
   `arti proxy` binary for now [verified: docs.rs/arti-client].
 
+### 2026-10-26 (Phase 0 build is green)
+- The workspace compiles and tests pass on **Rust 1.92.0** (installed via rustup in WSL Ubuntu 24.04)
+  [verified: `cargo test` run, 4m20s build]. `potato` builds `arti-client` with **rustls** (no system OpenSSL)
+  and **static-sqlite** (SQLite built from bundled source, so no system libsqlite3 is needed); `static` was
+  avoided because it would pull in native-tls [verified: docs.rs/arti-client feature docs + build error then fix].
+- Expanded into a multi-crate workspace: `potato` (client bin), `potato-policy` (routing modes, 3 tests),
+  `potarek-decoy` (decoy-query generator, 4 tests). Added CI (fmt/clippy/test on 1.92), issue/PR templates,
+  CODEOWNERS, dependabot, rustfmt, cargo-deny config, and `docs/ARCHITECTURE.md`.
+- Note: the Windows host has only standalone Rust 1.89 and no MSVC linker, so the supported build path is
+  Linux (WSL or native). Recorded in the crate README.
+
 ### Open items to research in upcoming phases
 - Phase 0: confirm `chutney` is still the current Tor test-network tool, and whether Shadow runs Arti directly
   **(unverified)**.

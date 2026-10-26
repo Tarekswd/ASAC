@@ -8,7 +8,11 @@ description = "Potato: a privacy-first Tor client layer built on Arti (Phase 0 s
 
 [dependencies]
 # Pinned exactly in Phase 0 so builds are reproducible; bump deliberately. See PLAN.md 8 (upstream drift).
-arti-client = "=0.47.0"
+# rustls (pure-Rust TLS) instead of the default native-tls: no system OpenSSL dependency, and it matches the
+# memory-safety stance in PLAN.md 2.3. compression kept (needs a C compiler, which is present).
+# static-sqlite builds SQLite from bundled source so no system libsqlite3 is required (self-contained,
+# reproducible builds); `static` is avoided because it would also pull in native-tls.
+arti-client = { version = "=0.47.0", default-features = false, features = ["tokio", "rustls", "compression", "static-sqlite"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "io-util"] }
 futures = "0.3"
 anyhow = "1"

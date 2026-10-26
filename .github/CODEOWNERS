@@ -1,0 +1,7 @@
+# Default owner for everything in the repo.
+* @Tarekswd
+
+# Security-sensitive areas warrant extra scrutiny.
+/crates/potato/        @Tarekswd
+/SECURITY.md           @Tarekswd
+/PLAN.md               @Tarekswd
