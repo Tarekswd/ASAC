@@ -65,8 +65,13 @@ the next preprocessing underneath.
   by construction (iterator input, never collected); it is not measured as RSS.
 - **M5 — integration + measurement.** Wire to a small real index (terms→records); benchmark online cost vs the
   trivial and 2-server schemes; measure in Shadow. Gate: online query is sublinear in practice on the prototype
-  index.
+  index. **Done (2026-10-29):** `examples/private_search.rs` searches a 16-term index end-to-end (permutation +
+  streaming); the server never receives the term; per-query download measured at **32 B (one record) + √n=4
+  indices** for single-server, vs 512 B (trivial, whole index) and 64 B (2-server) — sublinear confirmed.
+  Shadow measurement is deferred to the scale-up phase (prototype is in-process).
 - **M6 — write-up.** A PoPETs-style note + reproducible artifacts (the award/pitch path, PLAN.md 4.4).
+  **Done (2026-10-29):** `docs/PIR-WRITEUP.md` — construction, measured costs, assumptions, and the explicit
+  open proof obligations for external cryptographer review (the formal proof itself is not claimed here).
 
 Reference implementation to check against: the PIANO authors' code (eprint 2023/452). Do not copy blindly —
 re-derive, test against a naive baseline, and keep every assumption written down.

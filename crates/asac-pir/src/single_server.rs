@@ -510,4 +510,36 @@ mod tests {
             assert_eq!(got, w, "record {i}");
         }
     }
+
+    #[test]
+    fn end_to_end_private_search_over_term_index() {
+        // Full M5 path: public term->row directory, permuted + streamed index, private logical query.
+        let terms = [
+            "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p",
+        ];
+        let width = 8;
+        let results: Vec<Vec<u8>> = terms
+            .iter()
+            .map(|t| {
+                let mut v = format!("R-{t}").into_bytes();
+                v.resize(width, 0);
+                v
+            })
+            .collect();
+        let perm = Permutation::from_seed(16, 1);
+        let mut permuted = vec![Vec::new(); 16];
+        for (logical, rec) in results.iter().enumerate() {
+            permuted[perm.physical(logical)] = rec.clone();
+        }
+        let db = SingleServerDb::from_records(&permuted);
+        let mut state = preprocess_streaming(16, width, Params::for_sqrt_n(4), 2, permuted.iter().cloned());
+        let server = Server::new(&db);
+
+        let q = "k";
+        let row = terms.iter().position(|&t| t == q).unwrap();
+        let got = logical_query(&mut state, &perm, row, &server);
+        let mut want = format!("R-{q}").into_bytes();
+        want.resize(got.len(), 0);
+        assert_eq!(got, want);
+    }
 }
