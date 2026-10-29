@@ -9,3 +9,5 @@ publish = false
 description = "Private information retrieval for trustless query privacy (PLAN.md 4.4). First scheme: trivial PIR."
 
 [dependencies]
+# BLAKE3 keyed hash as the CSPRF for PIR offset derivation (never roll our own crypto, PLAN.md 2.3).
+blake3 = "=1.8.7"

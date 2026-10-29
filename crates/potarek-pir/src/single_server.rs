@@ -1,7 +1,13 @@
-//! Single-server sublinear PIR, PIANO-style (Zhou et al., IEEE S&P 2024) — **milestone M2** (see
-//! `docs/PIR-RESEARCH.md`), superseding M1's correctness-only version.
+//! Single-server sublinear PIR, PIANO-style (Zhou et al., IEEE S&P 2024) — **milestone M3 (in progress)** (see
+//! `docs/PIR-RESEARCH.md`), building on M2.
 //!
-//! M2 adds the privacy *mechanism*: equations are generated from random seeds (not the fixed diagonal), and
+//! M3 so far: offset derivation now uses a **CSPRF** (BLAKE3 keyed hash) instead of M2's splitmix stand-in, and
+//! a statistical test checks the server-visible offsets are ~uniform. **Still pending for M3:** the shared-seed
+//! database *permutation* that makes adaptive (data-dependent) query sequences look uniform, and a formal
+//! argument for the refresh distribution — until those land, treat privacy as empirically sanity-checked, not
+//! proven.
+//!
+//! M2 added the privacy *mechanism*: equations are generated from random seeds (not the fixed diagonal), and
 //! after each query the consumed equation is **refreshed** from a backup "conditioned on containing the queried
 //! index" so the remaining pool's distribution is not skewed. Each equation and replacement is used at most
 //! once. This supports a batch of up to ~sqrt(n) queries per preprocessing.
@@ -12,20 +18,27 @@
 //!
 //! Group operation is XOR over fixed-width records. `n` must be a perfect square and sqrt(n) >= 2.
 //!
-//! shortcut: offsets come from a non-cryptographic PRG (splitmix64); production needs a CSPRF, and the server
-//! must permute the database under a shared seed (M3) before this is private against adaptive queries.
+//! shortcut: the shared-seed database permutation for adaptive-query privacy is not implemented yet (next M3
+//! step); without it, privacy holds for queries not correlated with the (public) structure.
 
-/// splitmix64 finalizer — a fast, decent-quality mixer used here as a stand-in PRG (NOT cryptographic).
-fn mix(seed: u64) -> u64 {
-    let mut z = seed.wrapping_add(0x9E37_79B9_7F4A_7C15);
-    z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
-    z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
-    z ^ (z >> 31)
+/// Derive a 32-byte PRF key from a user-supplied master seed (BLAKE3 is a cryptographic hash).
+fn derive_key(master_seed: u64) -> [u8; 32] {
+    *blake3::hash(&master_seed.to_le_bytes()).as_bytes()
 }
 
-/// The offset chosen within `chunk` by an equation with the given `seed`, in `[0, sqrt_n)`.
-fn offset(seed: u64, chunk: usize, sqrt_n: usize) -> usize {
-    (mix(seed ^ (chunk as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15)) % sqrt_n as u64) as usize
+/// CSPRF: the offset chosen within `chunk` by equation `eq_id`, in `[0, sqrt_n)`, keyed by the client's secret
+/// `key`. Uses BLAKE3's keyed hash (a PRF/MAC), so a server without the key cannot predict or recognise the
+/// offsets — this is the cryptographic replacement for M2's splitmix stand-in.
+///
+/// shortcut: reducing a 64-bit value mod sqrt_n has negligible modulo bias for the small sqrt_n used here;
+/// use rejection sampling if sqrt_n ever approaches 2^64.
+fn offset(key: &[u8; 32], eq_id: u64, chunk: usize, sqrt_n: usize) -> usize {
+    let mut input = [0u8; 16];
+    input[..8].copy_from_slice(&eq_id.to_le_bytes());
+    input[8..].copy_from_slice(&(chunk as u64).to_le_bytes());
+    let digest = blake3::keyed_hash(key, &input);
+    let v = u64::from_le_bytes(digest.as_bytes()[..8].try_into().expect("8 bytes"));
+    (v % sqrt_n as u64) as usize
 }
 
 /// A database of fixed-width records (padded with zero bytes). `n` must be a perfect square.
@@ -126,11 +139,11 @@ pub struct ClientState {
 /// Preprocess the database into client hints using `master_seed` for all randomness.
 pub fn preprocess(db: &SingleServerDb, params: Params, master_seed: u64) -> ClientState {
     let s = db.sqrt_n;
+    let key = derive_key(master_seed);
 
     let equations = (0..params.primaries)
         .map(|k| {
-            let seed = mix(master_seed ^ k as u64);
-            let offsets: Vec<usize> = (0..s).map(|c| offset(seed, c, s)).collect();
+            let offsets: Vec<usize> = (0..s).map(|c| offset(&key, k as u64, c, s)).collect();
             let indices: Vec<usize> = (0..s).map(|c| c * s + offsets[c]).collect();
             Equation { offsets, parity: db.xor_at(&indices), consumed: false }
         })
@@ -140,9 +153,9 @@ pub fn preprocess(db: &SingleServerDb, params: Params, master_seed: u64) -> Clie
         .map(|hole| {
             (0..params.backups_per_chunk)
                 .map(|k| {
-                    let seed = mix(master_seed ^ 0xB0_0000 ^ ((hole * 4096 + k) as u64));
+                    let eq_id = (1u64 << 63) | ((hole as u64) << 20) | k as u64;
                     let offsets: Vec<usize> =
-                        (0..s).map(|c| if c == hole { 0 } else { offset(seed, c, s) }).collect();
+                        (0..s).map(|c| if c == hole { 0 } else { offset(&key, eq_id, c, s) }).collect();
                     let indices: Vec<usize> =
                         (0..s).filter(|&c| c != hole).map(|c| c * s + offsets[c]).collect();
                     Backup { offsets, parity_without_hole: db.xor_at(&indices), consumed: false }
@@ -273,5 +286,23 @@ mod tests {
         }
         let consumed = state.equations.iter().filter(|e| e.consumed).count();
         assert_eq!(consumed, batch.len());
+    }
+
+    #[test]
+    fn csprf_offsets_are_roughly_uniform() {
+        // Empirical sanity check (NOT a proof): the CSPRF's per-chunk offset is ~uniform over [0, s). This is
+        // the randomness the server-visible indices depend on; a broken PRF would show as skew here.
+        let key = derive_key(2026);
+        let s = 16usize;
+        let trials = 16_000u64;
+        let mut counts = vec![0usize; s];
+        for eq_id in 0..trials {
+            counts[offset(&key, eq_id, 0, s)] += 1;
+        }
+        let expected = trials as f64 / s as f64; // 1000 per bucket
+        for (off, &c) in counts.iter().enumerate() {
+            let c = c as f64;
+            assert!(c > expected * 0.75 && c < expected * 1.25, "offset {off}: {c} far from {expected}");
+        }
     }
 }
