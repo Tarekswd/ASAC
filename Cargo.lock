@@ -171,6 +171,13 @@ name = "asac-decoy"
 version = "0.0.0"
 
 [[package]]
+name = "asac-frontend"
+version = "0.0.0"
+dependencies = [
+ "url",
+]
+
+[[package]]
 name = "asac-index"
 version = "0.0.0"
 dependencies = [

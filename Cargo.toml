@@ -11,6 +11,7 @@ members = [
     "crates/asac-index",
     "crates/asac-search",
     "crates/asac-crawler",
+    "crates/asac-frontend",
 ]
 
 [workspace.package]

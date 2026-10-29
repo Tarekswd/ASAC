@@ -18,7 +18,8 @@ potarek/
 │   ├── asac-safety/     # lib: pre-index content-safety filter, launch blocker (PLAN 4.3 #2)
 │   ├── asac-index/      # lib: BM25 full-text index (Tantivy), safety-gated (PLAN 4.3 #3)
 │   ├── asac-search/     # lib: index results served over PIR, server never learns the query (PLAN 4.3 #6)
-│   └── asac-crawler/    # lib: polite robots-respecting crawl core, fetch behind a trait (PLAN 4.3 #1)
+│   ├── asac-crawler/    # lib: polite robots-respecting crawl core, fetch behind a trait (PLAN 4.3 #1)
+│   └── asac-frontend/   # lib: self-contained HTML results page, no JS/cookies/3rd-party (PLAN 4.3 #5)
 └── docs/
 ```
 
@@ -35,6 +36,7 @@ potarek/
 | `asac-index` | lib | BM25 full-text index (Tantivy); inserts gated by asac-safety; stores title/url/body/links. | 4.3 #3 | real, tested |
 | `asac-search` | lib | End-to-end private search: wires asac-index results into asac-pir single-server PIR over a public vocabulary (top-1-per-term cache), so a term lookup fetches its result without the server learning the term. | 4.3 #6 | real, tested |
 | `asac-crawler` | lib | Polite, robots-respecting crawl core: fetch behind a `Fetcher` trait (onion = arti-client, clear-web = Scrapling over Tor), extract title/text/links (HTML only, no JS), scope + frontier, output feeds asac-index. | 4.3 #1 | real, tested (core; live Tor/Scrapling backends pending) |
+| `asac-frontend` | lib | Renders the results page as one self-contained HTML document (no JS, no third-party resources, no cookies); escapes all untrusted query/result data and only links http(s) URLs. | 4.3 #5 | real, tested (core; arti onion host + Equi-X PoW + HTTP serving pending) |
 
 ## Crates planned (not yet created)
 
@@ -45,7 +47,6 @@ These are named here so the module boundaries are agreed before code lands. Each
 |---------------|----------------|----------|-------|
 | `potato-proxy` | Wrap Arti's SOCKS proxy with the policy layer (force CGO, Conflux, strict isolation). | 3.1, 3.4, 3.9 | 1 |
 | `potato-pq` | Hybrid post-quantum ntor-v3 + ML-KEM handshake negotiation. | 3.2 | 2 |
-| `asac-frontend` | v3 onion service front end with Equi-X PoW, static HTML, no JS. | 4.3 #5 | 4 |
 
 ## Hard rules the layout enforces
 
