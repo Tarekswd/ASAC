@@ -1,4 +1,4 @@
-# Potato Routing and the Potarek Search Engine: Implementation Plan
+# Potato Routing and the ASAC Search Engine: Implementation Plan
 
 Status: draft v0.2, 2026-10-26
 Sources: Tor spec repo `torspec` at commit `f0cda49b` (2026-10-22) and Arti at commit `c87b1abe` (2026-10-22), both cloned and read for this plan.
@@ -24,17 +24,17 @@ Anything marked **(unverified)** comes from memory, not from the sources. Check 
 
 ## 0.1 North star (what makes this worth doing)
 
-Potato as a Tor client is "compose Arti well" — useful, but not novel. The differentiator is **Potarek: a
+Potato as a Tor client is "compose Arti well" — useful, but not novel. The differentiator is **ASAC: a
 search engine that is *mathematically unable* to profile you** — privacy you do not have to trust the operator
 for. Every existing onion search engine offers a *no-log policy* you must take on faith [verified: Ahmia,
-DuckDuckGo onion, and newer "no-log" engines all advertise exactly this]; Potarek aims for operator-blindness
+DuckDuckGo onion, and newer "no-log" engines all advertise exactly this]; ASAC aims for operator-blindness
 **by construction**.
 
 **The idea that makes this reachable:** search is *latency-tolerant*. A query is tiny and infrequent and can
 wait seconds. Tor cannot defeat a global passive adversary because general browsing needs low latency — but
 the heavyweight defenses that *do* resist a global adversary (mixnet-style mixing and cover traffic) and that
 hide the query itself (private information retrieval) are exactly affordable when you only need them for
-search. So Potarek deploys, for the narrow search path, the strong defenses Tor's general-purpose design
+search. So ASAC deploys, for the narrow search path, the strong defenses Tor's general-purpose design
 cannot: **PIR** (the operator cannot learn *what* you searched) + **mixnet-style cover traffic** (a network
 observer cannot learn *that/when* you searched, or link you to the server) + **decoy queries**.
 
@@ -83,12 +83,12 @@ Protect against:
 - Some malicious relays, which must not be able to tag or modify cells (CGO is non-malleable).
 - A destination server, which must not learn the client's IP address.
 - A quantum adversary recording traffic now and decrypting it later (hybrid PQ handshake).
-- Search-engine operators, including us. Potarek must not be able to link queries to users.
+- Search-engine operators, including us. ASAC must not be able to link queries to users.
 
 Out of scope (same as Tor; say this openly to users):
 - A global passive adversary watching both ends. Tor's low-latency design cannot stop end-to-end timing
   correlation **(unverified)**. Potato's "Fortress" mode only *reduces* the risk.
-  - **Exception — the search path (Potarek).** Because search tolerates latency (see 0.1), Potarek pushes
+  - **Exception — the search path (ASAC).** Because search tolerates latency (see 0.1), ASAC pushes
     *past* Tor's global-adversary limit for queries: PIR for query content and mixnet-style cover traffic for
     metadata. This is in scope *for search only*, under stated assumptions, and is the project's flagship
     research goal (section 4.4). General browsing through Potato keeps the Tor limit above.
@@ -96,7 +96,7 @@ Out of scope (same as Tor; say this openly to users):
 - **Detecting whether someone is watching your screen, or whether spyware or monitoring software is on your
   device.** A privacy client cannot do this reliably: if the endpoint is already compromised it can lie to us,
   and a false "you are safe" is more dangerous than saying nothing. This is an operating-system and physical-
-  security problem, not something Potato or Potarek will claim to solve. See the note in 3.10.
+  security problem, not something Potato or ASAC will claim to solve. See the note in 3.10.
 
 ### 2.2 Modes
 
@@ -125,7 +125,7 @@ Decisions recorded so they are not re-litigated. Each is a deliberate "no", with
   behind a vetted library with constant-time guarantees.
 - **No claim to detect local surveillance of the user's device** (see 2.1 out-of-scope and 3.10).
 - **No PHP and no JavaScript in the stack.** Implementation is Rust (plus unavoidable build and config files). The
-  Potarek results page is static, server-rendered HTML with **no client-side JavaScript** — which also removes a
+  ASAC results page is static, server-rendered HTML with **no client-side JavaScript** — which also removes a
   major fingerprinting and exploit surface and matches the existing "no JS needed" front-end rule (4.2). If a
   dynamic UI ever becomes unavoidable, prefer server-side rendering, or a Rust-to-WASM path, over JavaScript, and
   never PHP.
@@ -196,7 +196,7 @@ Each item below includes: what it is, where it lives in Arti, what is new, and h
   (`spec/path-spec/stream-isolation.md`).
 
 ### 3.8 DoS and resource safety
-- Reuse Equi-X PoW (`crates/equix`) for Potarek's onion service.
+- Reuse Equi-X PoW (`crates/equix`) for ASAC's onion service.
 - Reuse `tor-memquota` for every new queue (Conflux reorder queue, PQ handshake reassembly buffers).
 
 ### 3.9 Wire compatibility and versioning
@@ -233,7 +233,7 @@ Each item below includes: what it is, where it lives in Arti, what is new, and h
 
 ---
 
-## 4. Potarek search engine
+## 4. ASAC search engine
 
 ### 4.1 Goal
 A search engine that indexes onion services (and optionally the clear web through Potato), runs as an onion
@@ -246,7 +246,7 @@ by construction (section 4.4), not merely promising not to log.
 user (Tor Browser / Potato client)
         |  onion circuit (Balanced mode)
         v
- Potarek front end  (v3 onion service, no JS needed, no cookies, PoW on)
+ ASAC front end  (v3 onion service, no JS needed, no cookies, PoW on)
         |
  query service  ->  index shards (Tantivy, BM25)
         ^
@@ -281,7 +281,7 @@ user (Tor Browser / Potato client)
    resources, and no cookies.
 6. **Privacy of queries.**
    - v1: no query logs. Only aggregate counters in memory, never per-query. Documented and published.
-   - v1: Potato circuits already hide the user's IP from Potarek.
+   - v1: Potato circuits already hide the user's IP from ASAC.
    - v2 and beyond: this is the **flagship** — see 4.4. The no-log policy above is table stakes (every onion
      search engine claims it); 4.4 makes profiling impossible *by construction*, not just promised.
 
@@ -296,7 +296,7 @@ by construction. Three composed mechanisms, each with an honest limit:
    prototype over a curated top-N / most-common-queries index first, not the full crawl **(unverified: current
    PIR scale)**.
 2. **Mixnet-style cover traffic on the search path** — a Loopix-style layer so a global passive observer
-   cannot tell *that* or *when* a user searched, or link them to Potarek [verified: mixnets resist the global
+   cannot tell *that* or *when* a user searched, or link them to ASAC [verified: mixnets resist the global
    passive adversary that Tor cannot, via mixing + cover traffic; Loopix, USENIX Security 2017]. Limit: costs
    latency and bandwidth, and needs enough cover volume and an honest fraction of mix nodes; this is why it is
    confined to the latency-tolerant search path, not general browsing.
@@ -314,14 +314,14 @@ measured search-path unobservability.
 7. **Decoy queries (optional, client-side, off by default).** The Potato client can mix the user's real searches
    with random, plausible-looking decoy searches, so anyone watching query *timing and volume* cannot pick the
    real ones out of the noise. This is a TrackMeNot / query-obfuscation style defense **(unverified)**. It is the
-   only form of "data poisoning" Potarek ships: the user poisons *their own* query stream to protect themselves,
+   only form of "data poisoning" ASAC ships: the user poisons *their own* query stream to protect themselves,
    never anyone else's data, index, or system.
    - Honest limits, all of which must be documented to the user:
      - It costs bandwidth and server load, so rate-limit it and keep crawler-style politeness. Fortress mode may
        turn it on by default; other modes leave it off.
      - Decoys must be drawn from a realistic query distribution, or they are trivially filtered out again
        **(unverified)**. A fixed or obviously-synthetic word list defeats the purpose.
-     - It adds **nothing** against Potarek itself, which keeps no query logs (item 6). Its value is against a
+     - It adds **nothing** against ASAC itself, which keeps no query logs (item 6). Its value is against a
        network observer, or a future compromise of a server that was supposed to be log-free.
      - Decoys must be drawn only from a vetted, benign term list and must never issue searches that could cause
        real-world harm (illegal, harassing, or dangerous terms). This constraint is part of the feature, not an
@@ -363,7 +363,7 @@ Each phase ends with a gate. Don't start the next phase until the gate passes.
 - Measure the location-inference advantage for Swift and the cost for Fortress.
 - **Gate:** each mode's leak and cost is quantified and documented. Swift ships only if the 3.3 gate passes.
 
-### Phase 4: Potarek v1 (weeks 25-40, in parallel with Phase 3)
+### Phase 4: ASAC v1 (weeks 25-40, in parallel with Phase 3)
 - Legal review and content-safety pipeline first.
 - Crawler, indexer, BM25 ranking, onion front end with PoW.
 - Seed with a small, manually curated list of onion services.
@@ -371,7 +371,7 @@ Each phase ends with a gate. Don't start the next phase until the gate passes.
   with PoW enabled.
 
 ### Phase 5: Hardening and audit (weeks 41-52)
-- External security audit of Potato and Potarek.
+- External security audit of Potato and ASAC.
 - Reproducible builds, signed releases, a vulnerability disclosure policy.
 - Closed beta, measuring real-world latency.
 - **Gate:** all critical and high audit findings are fixed.
@@ -380,7 +380,7 @@ Each phase ends with a gate. Don't start the next phase until the gate passes.
 - Only if Phases 1-5 show something that the Tor network cannot support, and only with a real plan for enough
   relays and users. Otherwise, contribute the improvements upstream to Tor. That is the higher-privacy outcome.
 
-### Phase 7: Potarek v2
+### Phase 7: ASAC v2
 - Link-graph ranking, spam and phishing detection, and the PIR prototype.
 
 ---
@@ -395,7 +395,7 @@ Each phase ends with a gate. Don't start the next phase until the gate passes.
 | Location-inference advantage (Swift) | Shadow plus an attacker model | Below a documented threshold |
 | Wire distinguishability | Packet and cell trace comparison against Arti | None beyond negotiated features |
 | Relay memory under Conflux and PQ | memquota stats | Within limits, no OOM kills under load |
-| Potarek query latency | Load test over onion | Under 2 s p90 including the circuit (assumption, tune it) |
+| ASAC query latency | Load test over onion | Under 2 s p90 including the circuit (assumption, tune it) |
 
 ---
 
@@ -405,7 +405,7 @@ Each phase ends with a gate. Don't start the next phase until the gate passes.
 - 1 applied cryptographer, at least part time (PQ handshake, CGO review, formal models).
 - 1 measurement and simulation engineer (Shadow, statistics).
 - 1 search engineer (crawling, Tantivy, ranking).
-- Legal counsel, and a trust-and-safety process for Potarek.
+- Legal counsel, and a trust-and-safety process for ASAC.
 - External auditors in Phase 5.
 
 ---
@@ -418,8 +418,8 @@ Each phase ends with a gate. Don't start the next phase until the gate passes.
 | Latency-aware routing leaks location | Users located | Middle-only, capped bias, Phase 3 gate |
 | PQ handshake bug | Broken secrecy | Hybrid construction, vetted library, formal model, audit |
 | Conflux memory DoS on exits | Relay instability | memquota, prop 329 OOM rules, `cfx_enabled` kill switch |
-| Potarek indexes illegal content | Legal and moral harm | Pre-index filter, legal review, abuse process (launch blocker) |
-| Potarek becomes a surveillance point | Query privacy lost | No logs, onion-only, published policy, PIR research |
+| ASAC indexes illegal content | Legal and moral harm | Pre-index filter, legal review, abuse process (launch blocker) |
+| ASAC becomes a surveillance point | Query privacy lost | No logs, onion-only, published policy, PIR research |
 | Forking Arti drifts from upstream | Security fixes missed | Depend on crates, keep a minimal fork, rebase monthly |
 | Overly aggressive congestion control | Harms other Tor users | Tune in Shadow only, keep Vegas fairness |
 
@@ -587,7 +587,7 @@ Kept so the "research as we go" improvements and their sources stay auditable. E
 
 ### 2026-10-26 (North-star pivot: trustless query privacy)
 - Reframed the project around a defensible differentiator (new sections 0.1 and 4.4, plus `docs/
-  DIFFERENTIATION.md`): Potarek as a search engine that is *mathematically unable* to profile users, versus
+  DIFFERENTIATION.md`): ASAC as a search engine that is *mathematically unable* to profile users, versus
   the no-log *policies* every existing onion search engine advertises [verified: Ahmia/DuckDuckGo-onion/others].
 - Key insight recorded: search is latency-tolerant, so it can afford the anti-global-adversary defenses Tor
   cannot — mixnet-style cover traffic (metadata) + PIR (query content) + decoy queries [verified: mixnets

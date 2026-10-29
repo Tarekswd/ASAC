@@ -1,6 +1,6 @@
 # Install guide
 
-Everything needed to build and run Potato/Potarek, by phase. Verified on **WSL2 Ubuntu 24.04 (noble),
+Everything needed to build and run Potato/ASAC, by phase. Verified on **WSL2 Ubuntu 24.04 (noble),
 x86_64**; a native Linux host works the same. The build is Linux-first — on Windows, use WSL2.
 
 ## Phase 0 — Foundations (required now)
@@ -47,7 +47,7 @@ No new system installs. Arti crates come via `cargo`. Optional: Tor Browser (kep
 ## Phase 3 — Swift / Fortress modes
 Nothing new; reuses Shadow from Phase 0. Scaled sims use **tornettools** (cloned) + Tor metrics data.
 
-## Phase 4 — Potarek search engine
+## Phase 4 — ASAC search engine
 - **Tantivy** — cargo crate (not a manual install).
 - **Scrapling** — `pip install scrapling` (HTTP-only over Tor per this project; no browser mode needed).
 - **Content-safety filter** — an industry hash-matching service/partner + a classifier; agreements + legal

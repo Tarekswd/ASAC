@@ -23,7 +23,7 @@ What you expected instead.
 
 ### Environment
 
-- Potarek/Potato version or commit:
+- ASAC/Potato version or commit:
 - OS and Rust version (`rustc --version`):
 - Mode (Swift / Balanced / Fortress):
 

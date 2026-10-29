@@ -1,4 +1,4 @@
-# Potato / Potarek Threat Model
+# Potato / ASAC Threat Model
 
 Status: draft v0.1, 2026-10-26. Standalone expansion of [PLAN.md](../PLAN.md) section 2.1, for reviewers and
 contributors. If this document and PLAN.md disagree, PLAN.md is authoritative until this one is ratified.
@@ -9,12 +9,12 @@ source are marked **(unverified)** and must be confirmed before anyone relies on
 ## 1. What we protect, and for whom
 
 The asset is the **linkability between a person and their network activity**: which sites or onion services
-they reach, and which searches they run on Potarek. The user is anyone using a Potato client (via Tor Browser)
-and/or the Potarek search engine. "Harm" is any party learning that *this person* did *this activity* when the
+they reach, and which searches they run on ASAC. The user is anyone using a Potato client (via Tor Browser)
+and/or the ASAC search engine. "Harm" is any party learning that *this person* did *this activity* when the
 user did not intend it.
 
 Potato is a client and protocol layer on the **existing Tor network**; its guarantees are Tor's guarantees,
-tuned and composed, not new ones [proof: PLAN.md section 0]. Potarek is an onion-service search engine designed
+tuned and composed, not new ones [proof: PLAN.md section 0]. ASAC is an onion-service search engine designed
 so its own operators cannot profile users [proof: PLAN.md 4.1].
 
 ## 2. Adversaries we defend against
@@ -26,7 +26,7 @@ so its own operators cannot profile users [proof: PLAN.md 4.1].
 | Some malicious relays | Control several relays | Must not tag or modify cells undetected | CGO non-malleable relay crypto [proof: PLAN.md 3.1, 2.1] |
 | Destination server | Receives the connection | Must not learn the client's IP | Exit relay originates the connection [proof: PLAN.md 2.1] |
 | Recording quantum adversary | Stores traffic now, decrypts later | Forward secrecy against future quantum attack | Hybrid ntor-v3 + ML-KEM handshake [proof: PLAN.md 3.2, 2.1] |
-| Search-engine operator (including us) | Runs Potarek | Must not link queries to users | No query logs; onion-only; client IP hidden by Potato [proof: PLAN.md 4.3 #6, 2.1] |
+| Search-engine operator (including us) | Runs ASAC | Must not link queries to users | No query logs; onion-only; client IP hidden by Potato [proof: PLAN.md 4.3 #6, 2.1] |
 
 ## 3. Out of scope (and why we say so openly)
 
@@ -76,7 +76,7 @@ project default is **privacy over latency** [proof: PLAN.md section 0].
   Fortress actually reduces it **(unverified)**.
 - Swift's location leak must be measured (Shadow + an attacker model) and bounded before it ships [proof:
   PLAN.md 3.3 gate].
-- Decoy queries are a weak defense: they do nothing against a log-free Potarek and are filterable if the decoy
+- Decoy queries are a weak defense: they do nothing against a log-free ASAC and are filterable if the decoy
   distribution is unrealistic [proof: PLAN.md 4.3 item 7].
 - The hybrid PQ handshake needs a formal model, fuzzing, and external cryptographer review before it is trusted
   [proof: PLAN.md 2 phase 2 gate].

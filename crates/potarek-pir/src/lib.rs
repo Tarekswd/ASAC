@@ -1,4 +1,4 @@
-//! Private information retrieval (PIR) for Potarek's trustless query privacy (PLAN.md 4.4).
+//! Private information retrieval (PIR) for ASAC's trustless query privacy (PLAN.md 4.4).
 //!
 //! The goal: the server answers a lookup **without learning which record was looked up**. This first scheme is
 //! *trivial PIR*: the server hands over the entire (small) database and the client reads the record locally.

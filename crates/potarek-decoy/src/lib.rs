@@ -1,6 +1,6 @@
 //! Client-side decoy-query generator: self-directed query obfuscation.
 //!
-//! This is the only form of "data poisoning" Potarek ships (PLAN.md 4.3 item 7): the user mixes
+//! This is the only form of "data poisoning" ASAC ships (PLAN.md 4.3 item 7): the user mixes
 //! random, benign decoy searches with their real ones so an observer of query timing and volume
 //! cannot pick the real queries out. It poisons *the user's own* query stream to protect them,
 //! never anyone else's data, index, or system.

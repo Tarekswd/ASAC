@@ -1,4 +1,4 @@
-# Potato/Potarek Rust workspace (Phase 0). See PLAN.md section 5.
+# Potato/ASAC Rust workspace (Phase 0). See PLAN.md section 5.
 [workspace]
 resolver = "2"
 members = [

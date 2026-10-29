@@ -1,6 +1,6 @@
 # Single-server sublinear PIR: research + solo-dev plan
 
-Goal: make Potarek's "operator cannot see your query" (PLAN.md 4.4) hold with a **single** server (no
+Goal: make ASAC's "operator cannot see your query" (PLAN.md 4.4) hold with a **single** server (no
 non-collusion assumption) and **sublinear** online cost, so it works for a realistically sized index.
 
 ## What the research says
@@ -35,7 +35,7 @@ the next preprocessing underneath.
 
 ### Honest limitations (bake into any claim)
 
-- Preprocessing reveals the **whole DB** to the client [verified: PIANO blog] — fine for Potarek because the
+- Preprocessing reveals the **whole DB** to the client [verified: PIANO blog] — fine for ASAC because the
   index is **public** anyway, but it rules out per-user permissioned data.
 - PIANO assumes a **static** DB; updates are an open problem [verified: PIANO blog]. Fine for a search index
   rebuilt periodically.

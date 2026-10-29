@@ -1,6 +1,6 @@
-# Contributing to Potarek
+# Contributing to ASAC
 
-Thanks for your interest. Potarek is privacy and cryptography software, so the bar for changes is deliberately
+Thanks for your interest. ASAC is privacy and cryptography software, so the bar for changes is deliberately
 high: **correctness and review matter more than merge speed.**
 
 Please also read the [Code of Conduct](CODE_OF_CONDUCT.md). For anything security-sensitive, follow

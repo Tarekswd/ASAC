@@ -1,6 +1,6 @@
 # Security Policy
 
-Potarek is privacy and anonymity software. A bug here can deanonymize real people, so we treat security
+ASAC is privacy and anonymity software. A bug here can deanonymize real people, so we treat security
 reports seriously and ask you to report them responsibly.
 
 ## Reporting a vulnerability
@@ -40,7 +40,7 @@ Read [PLAN.md](PLAN.md) section 2.1 for the full threat model. Some limits are i
 low-latency anonymity system and are **not** considered vulnerabilities:
 
 - A **global passive adversary** that can watch traffic at both ends can correlate it by timing. Like Tor,
-  Potarek's low-latency modes do not defend against this; Fortress mode only reduces the risk.
+  ASAC's low-latency modes do not defend against this; Fortress mode only reduces the risk.
 - A **compromised endpoint device or browser fingerprinting** is out of scope — that is the browser's job.
 
 If you are unsure whether something is in scope, report it privately and let us decide together.

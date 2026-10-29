@@ -1,4 +1,4 @@
-# What makes Potarek different
+# What makes ASAC different
 
 ## The claim
 
