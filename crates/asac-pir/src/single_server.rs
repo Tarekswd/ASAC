@@ -161,18 +161,21 @@ impl Params {
     }
 }
 
+#[derive(PartialEq, Eq)]
 struct Equation {
     offsets: Vec<usize>,
     parity: Vec<u8>,
     consumed: bool,
 }
 
+#[derive(PartialEq, Eq)]
 struct Backup {
     offsets: Vec<usize>,      // entry at the hole chunk is unused
     parity_without_hole: Vec<u8>,
     consumed: bool,
 }
 
+#[derive(PartialEq, Eq)]
 struct Replacement {
     index: usize,
     value: Vec<u8>,
@@ -181,6 +184,7 @@ struct Replacement {
 
 /// Client state after preprocessing. The database is dropped; only these sublinear hints remain. Mutable
 /// because querying consumes and refreshes hints.
+#[derive(PartialEq, Eq)]
 pub struct ClientState {
     sqrt_n: usize,
     equations: Vec<Equation>,
@@ -224,6 +228,96 @@ pub fn preprocess(db: &SingleServerDb, params: Params, master_seed: u64) -> Clie
                 .collect()
         })
         .collect();
+
+    ClientState { sqrt_n: s, equations, backups, replacements }
+}
+
+/// XOR `src` into `acc` (equal length).
+fn xor_into(acc: &mut [u8], src: &[u8]) {
+    for (a, b) in acc.iter_mut().zip(src) {
+        *a ^= *b;
+    }
+}
+
+/// Streaming preprocessing (M4): build **exactly the same hints** as [`preprocess`] without ever holding the
+/// whole database in memory. Records arrive one at a time from `records` (padded/truncated to `width`) in index
+/// order; each is folded into every hint it belongs to and then dropped, so peak memory is O(hints + width),
+/// not O(n * width). Identical to the batch build because XOR is order-independent.
+pub fn preprocess_streaming(
+    n: usize,
+    width: usize,
+    params: Params,
+    master_seed: u64,
+    records: impl Iterator<Item = Vec<u8>>,
+) -> ClientState {
+    let s = (n as f64).sqrt().round() as usize;
+    assert_eq!(s * s, n, "record count must be a perfect square");
+    assert!(s >= 2, "need sqrt(n) >= 2");
+    let key = derive_key(master_seed);
+
+    let mut equations: Vec<Equation> = (0..params.primaries)
+        .map(|k| Equation {
+            offsets: (0..s).map(|c| offset(&key, k as u64, c, s)).collect(),
+            parity: vec![0u8; width],
+            consumed: false,
+        })
+        .collect();
+
+    let mut backups: Vec<Vec<Backup>> = (0..s)
+        .map(|hole| {
+            (0..params.backups_per_chunk)
+                .map(|k| {
+                    let eq_id = (1u64 << 63) | ((hole as u64) << 20) | k as u64;
+                    Backup {
+                        offsets: (0..s)
+                            .map(|c| if c == hole { 0 } else { offset(&key, eq_id, c, s) })
+                            .collect(),
+                        parity_without_hole: vec![0u8; width],
+                        consumed: false,
+                    }
+                })
+                .collect()
+        })
+        .collect();
+
+    let keep = params.replacements_per_chunk.min(s);
+    let mut replacements: Vec<Vec<Replacement>> = (0..s)
+        .map(|c| {
+            (0..keep)
+                .map(|off| Replacement { index: c * s + off, value: vec![0u8; width], consumed: false })
+                .collect()
+        })
+        .collect();
+
+    let mut count = 0usize;
+    for (idx, rec) in records.enumerate() {
+        let mut row = rec;
+        row.resize(width, 0);
+        let c = idx / s;
+        let o = idx % s;
+        for eq in equations.iter_mut() {
+            if eq.offsets[c] == o {
+                xor_into(&mut eq.parity, &row);
+            }
+        }
+        for (hole, bs) in backups.iter_mut().enumerate() {
+            if hole == c {
+                continue;
+            }
+            for b in bs.iter_mut() {
+                if b.offsets[c] == o {
+                    xor_into(&mut b.parity_without_hole, &row);
+                }
+            }
+        }
+        if o < keep {
+            if let Some(r) = replacements[c].iter_mut().find(|r| r.index == c * s + o) {
+                r.value = row;
+            }
+        }
+        count += 1;
+    }
+    assert_eq!(count, n, "stream must yield exactly n records");
 
     ClientState { sqrt_n: s, equations, backups, replacements }
 }
@@ -388,6 +482,32 @@ mod tests {
             let mut want = format!("record-{i:03}").into_bytes();
             want.resize(got.len(), 0);
             assert_eq!(got, want, "logical {i}");
+        }
+    }
+
+    #[test]
+    fn streaming_builds_identical_hints() {
+        let records: Vec<Vec<u8>> = (0..16).map(|k| format!("rec-{k:04}").into_bytes()).collect();
+        let width = records.iter().map(Vec::len).max().unwrap();
+        let params = Params::for_sqrt_n(4);
+        let seed = 123;
+        let batch = preprocess(&SingleServerDb::from_records(&records), params, seed);
+        let streamed = preprocess_streaming(16, width, params, seed, records.iter().cloned());
+        assert!(batch == streamed, "streaming must build byte-identical hints to the batch build");
+    }
+
+    #[test]
+    fn streamed_hints_answer_queries() {
+        let records: Vec<Vec<u8>> = (0..16).map(|k| format!("rec-{k:04}").into_bytes()).collect();
+        let width = records.iter().map(Vec::len).max().unwrap();
+        let db = SingleServerDb::from_records(&records);
+        let mut state = preprocess_streaming(16, width, Params::for_sqrt_n(4), 55, records.iter().cloned());
+        let server = Server::new(&db);
+        for i in [2usize, 7, 11] {
+            let got = query(&mut state, i, &server);
+            let mut w = format!("rec-{i:04}").into_bytes();
+            w.resize(got.len(), 0);
+            assert_eq!(got, w, "record {i}");
         }
     }
 }

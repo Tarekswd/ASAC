@@ -59,7 +59,10 @@ the next preprocessing underneath.
   recovery through it. The *formal* privacy proof (refresh + permutation give the exact guarantee) is deferred
   to M6 / external review — the code says so.
 - **M4 — streaming preprocessing.** Download the DB in chunks, update hints, discard — bounded memory. Gate:
-  peak memory ≪ DB size; hints identical to the non-streaming build.
+  peak memory ≪ DB size; hints identical to the non-streaming build. **Done (2026-10-29):**
+  `preprocess_streaming` folds records in one at a time (holding only the hints + one record) and is tested to
+  build **byte-identical** hints to the batch `preprocess` and to answer queries correctly. The memory bound is
+  by construction (iterator input, never collected); it is not measured as RSS.
 - **M5 — integration + measurement.** Wire to a small real index (terms→records); benchmark online cost vs the
   trivial and 2-server schemes; measure in Shadow. Gate: online query is sublinear in practice on the prototype
   index.
