@@ -74,7 +74,7 @@ is needed. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the crate layout
 |-------|------------|
 | `potato` | Client binary: bootstraps a Tor client via `arti-client`; SOCKS proxy is Arti's `arti proxy` for now. |
 | `potato-policy` | Routing modes (Swift/Balanced/Fortress) and the privacy-over-latency rules. |
-| `potarek-decoy` | Client-side decoy-query generator (self-directed query obfuscation). |
+| `asac-decoy` | Client-side decoy-query generator (self-directed query obfuscation). |
 
 ## Contributing
 

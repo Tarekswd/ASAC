@@ -473,7 +473,7 @@ Kept so the "research as we go" improvements and their sources stay auditable. E
   and **static-sqlite** (SQLite built from bundled source, so no system libsqlite3 is needed); `static` was
   avoided because it would pull in native-tls [verified: docs.rs/arti-client feature docs + build error then fix].
 - Expanded into a multi-crate workspace: `potato` (client bin), `potato-policy` (routing modes, 3 tests),
-  `potarek-decoy` (decoy-query generator, 4 tests). Added CI (fmt/clippy/test on 1.92), issue/PR templates,
+  `asac-decoy` (decoy-query generator, 4 tests). Added CI (fmt/clippy/test on 1.92), issue/PR templates,
   CODEOWNERS, dependabot, rustfmt, cargo-deny config, and `docs/ARCHITECTURE.md`.
 - Note: the Windows host has only standalone Rust 1.89 and no MSVC linker, so the supported build path is
   Linux (WSL or native). Recorded in the crate README.

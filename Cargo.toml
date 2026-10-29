@@ -4,9 +4,9 @@ resolver = "2"
 members = [
     "crates/potato",
     "crates/potato-policy",
-    "crates/potarek-decoy",
+    "crates/asac-decoy",
     "crates/potato-bench",
-    "crates/potarek-pir",
+    "crates/asac-pir",
 ]
 
 [workspace.package]

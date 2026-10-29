@@ -13,8 +13,8 @@ potarek/
 │   ├── potato/             # binary: client entry point + connectivity (Phase 0/1)
 │   ├── potato-policy/      # lib: routing Modes + privacy-over-latency policy (PLAN 2.2, 3.3, 3.7)
 │   ├── potato-bench/       # bin: SOCKS5 benchmark (connect/TTFB/throughput) (PLAN 6)
-│   ├── potarek-decoy/      # lib: client-side decoy-query generator (PLAN 4.3 item 7)
-│   └── potarek-pir/        # lib: private information retrieval for trustless query privacy (PLAN 4.4)
+│   ├── asac-decoy/      # lib: client-side decoy-query generator (PLAN 4.3 item 7)
+│   └── asac-pir/        # lib: private information retrieval for trustless query privacy (PLAN 4.4)
 └── docs/
 ```
 
@@ -25,8 +25,8 @@ potarek/
 | `potato` | bin | Bootstrap a Tor client via `arti-client`; smoke-test connectivity. SOCKS proxy is Arti's `arti proxy` for now. | 3, 5 (Phase 0/1) | skeleton |
 | `potato-policy` | lib | `Mode` enum (Swift/Balanced/Fortress) and the rules each mode implies. | 2.2 | real, tested |
 | `potato-bench` | bin | SOCKS5 benchmark: connect/TTFB/total/throughput through any proxy. | 6 | real, tested + live |
-| `potarek-decoy` | lib | Generate benign decoy queries from a caller-supplied vetted term list. | 4.3 | real, tested |
-| `potarek-pir` | lib | PIR so the server can't learn the query. First scheme: trivial PIR (server sends whole small index). | 4.4 | real, tested |
+| `asac-decoy` | lib | Generate benign decoy queries from a caller-supplied vetted term list. | 4.3 | real, tested |
+| `asac-pir` | lib | PIR so the server can't learn the query. First scheme: trivial PIR (server sends whole small index). | 4.4 | real, tested |
 
 ## Crates planned (not yet created)
 
@@ -37,10 +37,10 @@ These are named here so the module boundaries are agreed before code lands. Each
 |---------------|----------------|----------|-------|
 | `potato-proxy` | Wrap Arti's SOCKS proxy with the policy layer (force CGO, Conflux, strict isolation). | 3.1, 3.4, 3.9 | 1 |
 | `potato-pq` | Hybrid post-quantum ntor-v3 + ML-KEM handshake negotiation. | 3.2 | 2 |
-| `potarek-crawler` | Onion crawler (Rust/`arti-client`) + clear-web crawler (Scrapling, HTTP-only over Tor). | 4.3 #1 | 4 |
-| `potarek-index` | Full-text index over Tantivy (BM25), storing title/URL/text/links only. | 4.3 #3 | 4 |
-| `potarek-frontend` | v3 onion service front end with Equi-X PoW, static HTML, no JS. | 4.3 #5 | 4 |
-| `potarek-safety` | Pre-index content-safety filter (launch blocker). | 4.3 #2 | 4 |
+| `asac-crawler` | Onion crawler (Rust/`arti-client`) + clear-web crawler (Scrapling, HTTP-only over Tor). | 4.3 #1 | 4 |
+| `asac-index` | Full-text index over Tantivy (BM25), storing title/URL/text/links only. | 4.3 #3 | 4 |
+| `asac-frontend` | v3 onion service front end with Equi-X PoW, static HTML, no JS. | 4.3 #5 | 4 |
+| `asac-safety` | Pre-index content-safety filter (launch blocker). | 4.3 #2 | 4 |
 
 ## Hard rules the layout enforces
 

@@ -148,6 +148,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "asac-decoy"
+version = "0.0.0"
+
+[[package]]
+name = "asac-pir"
+version = "0.0.0"
+dependencies = [
+ "blake3",
+]
+
+[[package]]
 name = "ascii"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2557,17 +2568,6 @@ dependencies = [
  "pin-project",
  "static_assertions",
  "thiserror 1.0.69",
-]
-
-[[package]]
-name = "potarek-decoy"
-version = "0.0.0"
-
-[[package]]
-name = "potarek-pir"
-version = "0.0.0"
-dependencies = [
- "blake3",
 ]
 
 [[package]]

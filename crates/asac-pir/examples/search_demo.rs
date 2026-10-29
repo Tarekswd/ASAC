@@ -1,10 +1,10 @@
 //! End-to-end demo of trustless query privacy (PLAN.md 4.4): search a small index so the server never learns
-//! the search term. Run: `cargo run -p potarek-pir --example search_demo`
+//! the search term. Run: `cargo run -p asac-pir --example search_demo`
 //!
 //! shortcut: the two-server demo uses a fixed-seed PRG for the selection vector; production needs a CSPRNG.
 
-use potarek_pir::two_server::{combine, make_queries, TwoServerDb, TwoServerServer};
-use potarek_pir::{PirClient, PirDatabase, PirServer};
+use asac_pir::two_server::{combine, make_queries, TwoServerDb, TwoServerServer};
+use asac_pir::{PirClient, PirDatabase, PirServer};
 
 fn main() {
     // Public index: term -> result bytes. The set of terms is public; which one you search is private.
