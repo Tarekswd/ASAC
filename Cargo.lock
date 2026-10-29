@@ -171,6 +171,30 @@ name = "asac-decoy"
 version = "0.0.0"
 
 [[package]]
+name = "asac-demo"
+version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "asac-crawler",
+ "asac-fetch",
+ "asac-index",
+ "asac-site",
+]
+
+[[package]]
+name = "asac-fetch"
+version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "arti-client",
+ "asac-crawler",
+ "futures",
+ "tokio",
+ "tor-rtcompat",
+ "url",
+]
+
+[[package]]
 name = "asac-frontend"
 version = "0.0.0"
 dependencies = [
@@ -182,6 +206,7 @@ name = "asac-index"
 version = "0.0.0"
 dependencies = [
  "asac-safety",
+ "serde_json",
  "tantivy",
 ]
 
@@ -205,6 +230,15 @@ version = "0.0.0"
 dependencies = [
  "asac-index",
  "asac-pir",
+ "tantivy",
+]
+
+[[package]]
+name = "asac-site"
+version = "0.0.0"
+dependencies = [
+ "asac-frontend",
+ "asac-index",
  "tantivy",
 ]
 

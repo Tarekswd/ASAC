@@ -1,0 +1,19 @@
+[package]
+name = "asac-fetch"
+version = "0.0.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish = false
+description = "Live Fetcher backend for asac-crawler: HTTP over Tor via arti-client (onion and clear-web). Bridges the sync Fetcher trait to arti's async client."
+
+[dependencies]
+asac-crawler = { path = "../asac-crawler" }
+# Mirror potato's exact Arti feature set (rustls, no system OpenSSL/sqlite). See crates/potato/Cargo.toml.
+arti-client = { version = "=0.47.0", default-features = false, features = ["tokio", "rustls", "compression", "static-sqlite"] }
+tor-rtcompat = { version = "=0.47.0", features = ["tokio", "rustls"] }
+tokio = { version = "1", features = ["rt-multi-thread"] }
+futures = "0.3"
+url = "2.5.8"
+anyhow = "1"

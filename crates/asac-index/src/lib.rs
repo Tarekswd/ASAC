@@ -18,6 +18,25 @@ pub struct Hit {
     pub json: String,
 }
 
+/// A search hit with the stored fields parsed out of the JSON, ready for the front end to render.
+pub struct DocHit {
+    pub score: f32,
+    pub title: String,
+    pub url: String,
+    pub body: String,
+    pub links: String,
+}
+
+/// Pull the first string value of a stored field out of Tantivy's `to_json` output, which represents each
+/// field as an array of values (tolerant of a bare string too).
+fn first_str(v: &serde_json::Value, key: &str) -> String {
+    match v.get(key) {
+        Some(serde_json::Value::Array(a)) => a.first().and_then(|x| x.as_str()).unwrap_or_default().to_string(),
+        Some(serde_json::Value::String(s)) => s.clone(),
+        _ => String::new(),
+    }
+}
+
 /// A BM25 full-text index. Inserts are gated by a content-safety filter; search ranks by BM25 over title+body.
 pub struct AsacIndex {
     index: Index,
@@ -88,6 +107,25 @@ impl AsacIndex {
         }
         Ok(hits)
     }
+
+    /// Like [`AsacIndex::search`] but returns each hit's stored fields already parsed out (title/url/body/
+    /// links), so callers don't re-parse the JSON.
+    pub fn search_docs(&self, query: &str, limit: usize) -> tantivy::Result<Vec<DocHit>> {
+        Ok(self
+            .search(query, limit)?
+            .into_iter()
+            .map(|h| {
+                let v: serde_json::Value = serde_json::from_str(&h.json).unwrap_or(serde_json::Value::Null);
+                DocHit {
+                    score: h.score,
+                    title: first_str(&v, "title"),
+                    url: first_str(&v, "url"),
+                    body: first_str(&v, "body"),
+                    links: first_str(&v, "links"),
+                }
+            })
+            .collect())
+    }
 }
 
 #[cfg(test)]
@@ -114,6 +152,21 @@ mod tests {
         let hits = idx.search("whale sea", 5).unwrap();
         assert!(!hits.is_empty(), "expected a hit");
         assert!(hits[0].json.contains("Old Man"), "the sea document should rank first");
+    }
+
+    #[test]
+    fn search_docs_parses_stored_fields() {
+        let mut idx = AsacIndex::new().unwrap();
+        let f = ContentFilter::new(NoKnownIllegal);
+        idx.add(&f, "Rust Lang", "http://x/rust", "memory safety ownership", "http://x/a").unwrap();
+        idx.commit().unwrap();
+
+        let hits = idx.search_docs("ownership", 5).unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].title, "Rust Lang");
+        assert_eq!(hits[0].url, "http://x/rust");
+        assert!(hits[0].body.contains("ownership"));
+        assert_eq!(hits[0].links, "http://x/a");
     }
 
     #[test]
