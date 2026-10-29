@@ -10,6 +10,7 @@ members = [
     "crates/asac-safety",
     "crates/asac-index",
     "crates/asac-search",
+    "crates/asac-crawler",
 ]
 
 [workspace.package]
