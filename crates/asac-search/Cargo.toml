@@ -1,0 +1,14 @@
+[package]
+name = "asac-search"
+version = "0.0.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish = false
+description = "Private search: BM25 index (asac-index) results served via PIR (asac-pir) so the server never learns the query."
+
+[dependencies]
+asac-index = { path = "../asac-index" }
+asac-pir = { path = "../asac-pir" }
+tantivy = "=0.27.0"

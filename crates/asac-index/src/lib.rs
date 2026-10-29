@@ -5,7 +5,7 @@
 //! This is the in-memory prototype; a real deployment would use a persistent directory and feed the stored
 //! records to `asac-pir` for private retrieval.
 
-use asac_safety::{ContentFilter, HashMatchBackend, Verdict};
+pub use asac_safety::{ContentFilter, HashMatchBackend, Verdict};
 use tantivy::collector::TopDocs;
 use tantivy::doc;
 use tantivy::query::QueryParser;

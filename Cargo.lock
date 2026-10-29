@@ -183,6 +183,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "asac-search"
+version = "0.0.0"
+dependencies = [
+ "asac-index",
+ "asac-pir",
+ "tantivy",
+]
+
+[[package]]
 name = "ascii"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

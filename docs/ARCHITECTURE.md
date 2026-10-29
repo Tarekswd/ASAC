@@ -15,7 +15,9 @@ potarek/
 │   ├── potato-bench/       # bin: SOCKS5 benchmark (connect/TTFB/throughput) (PLAN 6)
 │   ├── asac-decoy/      # lib: client-side decoy-query generator (PLAN 4.3 item 7)
 │   ├── asac-pir/        # lib: private information retrieval for trustless query privacy (PLAN 4.4)
-│   └── asac-safety/     # lib: pre-index content-safety filter, launch blocker (PLAN 4.3 #2)
+│   ├── asac-safety/     # lib: pre-index content-safety filter, launch blocker (PLAN 4.3 #2)
+│   ├── asac-index/      # lib: BM25 full-text index (Tantivy), safety-gated (PLAN 4.3 #3)
+│   └── asac-search/     # lib: index results served over PIR, server never learns the query (PLAN 4.3 #6)
 └── docs/
 ```
 
@@ -30,6 +32,7 @@ potarek/
 | `asac-pir` | lib | PIR so the server can't learn the query. First scheme: trivial PIR (server sends whole small index). | 4.4 | real, tested |
 | `asac-safety` | lib | Pre-index content-safety filter (hash + keyword blocklists + required partner seam); fails closed. | 4.3 #2 | real, tested |
 | `asac-index` | lib | BM25 full-text index (Tantivy); inserts gated by asac-safety; stores title/url/body/links. | 4.3 #3 | real, tested |
+| `asac-search` | lib | End-to-end private search: wires asac-index results into asac-pir single-server PIR over a public vocabulary (top-1-per-term cache), so a term lookup fetches its result without the server learning the term. | 4.3 #6 | real, tested |
 
 ## Crates planned (not yet created)
 
@@ -41,7 +44,6 @@ These are named here so the module boundaries are agreed before code lands. Each
 | `potato-proxy` | Wrap Arti's SOCKS proxy with the policy layer (force CGO, Conflux, strict isolation). | 3.1, 3.4, 3.9 | 1 |
 | `potato-pq` | Hybrid post-quantum ntor-v3 + ML-KEM handshake negotiation. | 3.2 | 2 |
 | `asac-crawler` | Onion crawler (Rust/`arti-client`) + clear-web crawler (Scrapling, HTTP-only over Tor). | 4.3 #1 | 4 |
-| `asac-index` | Full-text index over Tantivy (BM25), storing title/URL/text/links only. | 4.3 #3 | 4 |
 | `asac-frontend` | v3 onion service front end with Equi-X PoW, static HTML, no JS. | 4.3 #5 | 4 |
 
 ## Hard rules the layout enforces
