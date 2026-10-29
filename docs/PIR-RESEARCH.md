@@ -53,7 +53,11 @@ the next preprocessing underneath.
   double-spend; clippy clean under -D warnings.
 - **M3 — adaptive-query privacy.** DB permutation via a shared seed so queries look random; write down the
   privacy argument; note malicious-server affects correctness not privacy. Gate: a statistical test that the
-  server's per-query indices are ~uniform per chunk and independent of the true index.
+  server's per-query indices are ~uniform per chunk and independent of the true index. **Done (2026-10-29):**
+  offsets use a BLAKE3 **CSPRF**; a shared-seed **`Permutation`** (CSPRG Fisher-Yates) maps logical queries to
+  physical slots; tests cover offset uniformity, that the permutation is a bijection, and end-to-end logical
+  recovery through it. The *formal* privacy proof (refresh + permutation give the exact guarantee) is deferred
+  to M6 / external review — the code says so.
 - **M4 — streaming preprocessing.** Download the DB in chunks, update hints, discard — bounded memory. Gate:
   peak memory ≪ DB size; hints identical to the non-streaming build.
 - **M5 — integration + measurement.** Wire to a small real index (terms→records); benchmark online cost vs the

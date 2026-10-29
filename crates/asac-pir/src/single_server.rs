@@ -1,10 +1,11 @@
 //! Single-server sublinear PIR, PIANO-style (Zhou et al., IEEE S&P 2024) — **milestone M3 (in progress)** (see
 //! `docs/PIR-RESEARCH.md`), building on M2.
 //!
-//! M3 so far: offset derivation now uses a **CSPRF** (BLAKE3 keyed hash) instead of M2's splitmix stand-in, and
-//! a statistical test checks the server-visible offsets are ~uniform. **Still pending for M3:** the shared-seed
-//! database *permutation* that makes adaptive (data-dependent) query sequences look uniform, and a formal
-//! argument for the refresh distribution — until those land, treat privacy as empirically sanity-checked, not
+//! M3 adds the cryptographic/analysis ingredients: offsets come from a **CSPRF** (BLAKE3 keyed hash), the
+//! shared-seed database **permutation** ([`Permutation`]) puts adaptive query streams into the random-query
+//! distribution the analysis assumes, and statistical tests check offset uniformity and that the permutation
+//! is a bijection. **Still deferred (M6 / external review):** a *formal proof* that the refresh and permutation
+//! together give the exact privacy guarantee — until then, treat privacy as empirically sanity-checked, not
 //! proven.
 //!
 //! M2 added the privacy *mechanism*: equations are generated from random seeds (not the fixed diagonal), and
@@ -18,8 +19,8 @@
 //!
 //! Group operation is XOR over fixed-width records. `n` must be a perfect square and sqrt(n) >= 2.
 //!
-//! shortcut: the shared-seed database permutation for adaptive-query privacy is not implemented yet (next M3
-//! step); without it, privacy holds for queries not correlated with the (public) structure.
+//! shortcut: the formal privacy proof is pending (M6); the permutation here provides the mechanism, not a
+//! proof, and the modulo reductions assume small sqrt_n / n.
 
 /// Derive a 32-byte PRF key from a user-supplied master seed (BLAKE3 is a cryptographic hash).
 fn derive_key(master_seed: u64) -> [u8; 32] {
@@ -39,6 +40,46 @@ fn offset(key: &[u8; 32], eq_id: u64, chunk: usize, sqrt_n: usize) -> usize {
     let digest = blake3::keyed_hash(key, &input);
     let v = u64::from_le_bytes(digest.as_bytes()[..8].try_into().expect("8 bytes"));
     (v % sqrt_n as u64) as usize
+}
+
+/// Draw a pseudorandom u64 from `key` at counter `ctr` (BLAKE3 keyed hash), advancing `ctr`.
+fn prng_u64(key: &[u8; 32], ctr: &mut u64) -> u64 {
+    let digest = blake3::keyed_hash(key, &ctr.to_le_bytes());
+    *ctr = ctr.wrapping_add(1);
+    u64::from_le_bytes(digest.as_bytes()[..8].try_into().expect("8 bytes"))
+}
+
+/// A database permutation derived from a shared seed — PIANO's device for the *adaptive*-query setting: the
+/// server stores records in a random permuted order whose seed it shares with the client, so an adaptive
+/// sequence of logical queries maps to physical positions distributed as the security analysis assumes.
+///
+/// Note on scope: the server knows the seed, so the permutation does NOT by itself hide a single logical index
+/// — the per-query equation/replacement mechanism (M2) does that. The permutation keeps the *query stream*
+/// within the analysed random-query distribution. A formal privacy argument for the adaptive setting is
+/// deferred to M6 / external review.
+///
+/// shortcut: Fisher-Yates with a modulo reduction (negligible bias for small n; use rejection sampling for
+/// large n).
+pub struct Permutation {
+    phys: Vec<usize>, // phys[logical] = the physical slot holding that logical record
+}
+
+impl Permutation {
+    pub fn from_seed(n: usize, seed: u64) -> Self {
+        let key = derive_key(seed ^ 0x5041_524D_5554_4531); // domain-separate from the offset key
+        let mut phys: Vec<usize> = (0..n).collect();
+        let mut ctr = 0u64;
+        for j in (1..n).rev() {
+            let r = (prng_u64(&key, &mut ctr) % (j as u64 + 1)) as usize;
+            phys.swap(j, r);
+        }
+        Self { phys }
+    }
+
+    /// The physical slot holding logical record `i`.
+    pub fn physical(&self, i: usize) -> usize {
+        self.phys[i]
+    }
 }
 
 /// A database of fixed-width records (padded with zero bytes). `n` must be a perfect square.
@@ -64,6 +105,17 @@ impl SingleServerDb {
             })
             .collect();
         Self { width, sqrt_n, rows }
+    }
+
+    /// Build the server's database in the order given by `perm`: physical slot `perm.physical(i)` holds logical
+    /// record `i`. The client uses the same `perm` to translate logical queries (see [`logical_query`]).
+    pub fn from_records_with_permutation(records: &[Vec<u8>], perm: &Permutation) -> Self {
+        let n = records.len();
+        let mut permuted = vec![Vec::new(); n];
+        for (logical, rec) in records.iter().enumerate() {
+            permuted[perm.physical(logical)] = rec.clone();
+        }
+        Self::from_records(&permuted)
     }
 
     fn xor_at(&self, indices: &[usize]) -> Vec<u8> {
@@ -229,6 +281,11 @@ pub fn query(state: &mut ClientState, i: usize, server: &Server) -> Vec<u8> {
     xi
 }
 
+/// Fetch logical record `i` through a shared permutation: translate to its physical slot, then run [`query`].
+pub fn logical_query(state: &mut ClientState, perm: &Permutation, i: usize, server: &Server) -> Vec<u8> {
+    query(state, perm.physical(i), server)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -303,6 +360,34 @@ mod tests {
         for (off, &c) in counts.iter().enumerate() {
             let c = c as f64;
             assert!(c > expected * 0.75 && c < expected * 1.25, "offset {off}: {c} far from {expected}");
+        }
+    }
+
+    #[test]
+    fn permutation_is_a_bijection() {
+        let perm = Permutation::from_seed(100, 42);
+        let mut seen = vec![false; 100];
+        for i in 0..100 {
+            let p = perm.physical(i);
+            assert!(!seen[p], "physical slot {p} assigned twice");
+            seen[p] = true;
+        }
+        assert!(seen.into_iter().all(|b| b), "every slot must be used");
+    }
+
+    #[test]
+    fn permuted_scheme_recovers_logical_records() {
+        let records: Vec<Vec<u8>> = (0..16).map(|k| format!("record-{k:03}").into_bytes()).collect();
+        let perm = Permutation::from_seed(16, 0x5EED);
+        let db = SingleServerDb::from_records_with_permutation(&records, &perm);
+        let mut state = preprocess(&db, Params::for_sqrt_n(4), 7);
+        let server = Server::new(&db);
+        // An arbitrary (adaptive-looking) logical order; each must come back correct through the permutation.
+        for &i in &[3usize, 9, 0, 15, 6] {
+            let got = logical_query(&mut state, &perm, i, &server);
+            let mut want = format!("record-{i:03}").into_bytes();
+            want.resize(got.len(), 0);
+            assert_eq!(got, want, "logical {i}");
         }
     }
 }
