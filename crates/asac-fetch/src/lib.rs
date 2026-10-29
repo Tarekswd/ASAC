@@ -6,17 +6,17 @@
 //! Tokio runtime via `block_on` — fine because the crawler drives the fetcher from an ordinary (non-async)
 //! thread. The HTTP request/response handling follows the raw-stream pattern proven in `crates/potato`.
 //!
-//! shortcut: `http` only (TLS/`https` would need a rustls layer over the Tor stream — add when a target needs
-//! it); response bodies are decoded as UTF-8 and de-chunked only for `Transfer-Encoding: chunked`, with no
-//! gzip/deflate handling. Onion services and many clear-web pages serve plain `http` over the Tor circuit, so
-//! this is enough to crawl live; richer transport is the upgrade.
+//! shortcut: `http` and `https` (TLS over the Tor stream via rustls/ring, Mozilla roots from `webpki-roots`);
+//! response bodies are decoded as UTF-8 and de-chunked only for `Transfer-Encoding: chunked`, with no
+//! gzip/deflate handling. Add body decompression when a target needs it.
 
 use std::sync::Arc;
 
 use anyhow::{anyhow, Context, Result};
 use arti_client::{TorClient, TorClientConfig};
 use asac_crawler::{FetchError, Fetcher, Page};
-use futures::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio_rustls::{rustls, TlsConnector};
 use tor_rtcompat::PreferredRuntime;
 use url::Url;
 
@@ -25,6 +25,7 @@ use url::Url;
 pub struct TorFetcher {
     rt: tokio::runtime::Runtime,
     client: Arc<TorClient<PreferredRuntime>>,
+    tls: TlsConnector,
     user_agent: String,
 }
 
@@ -38,15 +39,16 @@ impl TorFetcher {
         let client = rt
             .block_on(TorClient::create_bootstrapped(TorClientConfig::default()))
             .context("bootstrap Tor client")?;
-        Ok(Self { rt, client, user_agent: user_agent.to_string() })
+        Ok(Self { rt, client, tls: tls_connector(), user_agent: user_agent.to_string() })
     }
 
-    async fn get(client: &TorClient<PreferredRuntime>, ua: &str, url: &Url) -> Result<Page> {
-        if url.scheme() != "http" {
-            return Err(anyhow!("only http is supported, got scheme {:?}", url.scheme()));
-        }
+    async fn get(
+        client: &TorClient<PreferredRuntime>,
+        tls: &TlsConnector,
+        ua: &str,
+        url: &Url,
+    ) -> Result<Page> {
         let host = url.host_str().ok_or_else(|| anyhow!("url has no host"))?;
-        let port = url.port().unwrap_or(80);
 
         let mut path = url.path().to_string();
         if let Some(q) = url.query() {
@@ -57,17 +59,20 @@ impl TorFetcher {
             path.push('/');
         }
 
-        let mut stream = client.connect((host, port)).await.context("tor connect")?;
-        let req = format!(
-            "GET {path} HTTP/1.1\r\nHost: {host}\r\nUser-Agent: {ua}\r\n\
-Accept: text/html\r\nConnection: close\r\n\r\n"
-        );
-        stream.write_all(req.as_bytes()).await.context("send request")?;
-        stream.flush().await.context("flush request")?; // Arti buffers; flush is required.
-
-        let mut buf = Vec::new();
-        stream.read_to_end(&mut buf).await.context("read response")?;
-        Ok(parse_response(&buf))
+        match url.scheme() {
+            "http" => {
+                let stream = client.connect((host, url.port().unwrap_or(80))).await.context("tor connect")?;
+                http_exchange(stream, host, &path, ua).await
+            }
+            "https" => {
+                let stream = client.connect((host, url.port().unwrap_or(443))).await.context("tor connect")?;
+                let server_name = rustls::pki_types::ServerName::try_from(host.to_string())
+                    .map_err(|e| anyhow!("bad TLS server name {host}: {e}"))?;
+                let tls_stream = tls.connect(server_name, stream).await.context("TLS handshake")?;
+                http_exchange(tls_stream, host, &path, ua).await
+            }
+            other => Err(anyhow!("unsupported scheme {other:?}")),
+        }
     }
 }
 
@@ -75,9 +80,37 @@ impl Fetcher for TorFetcher {
     fn fetch(&self, url: &str) -> Result<Page, FetchError> {
         let parsed = Url::parse(url).map_err(|e| FetchError::Network(format!("bad url {url}: {e}")))?;
         self.rt
-            .block_on(Self::get(&self.client, &self.user_agent, &parsed))
+            .block_on(Self::get(&self.client, &self.tls, &self.user_agent, &parsed))
             .map_err(|e| FetchError::Network(e.to_string()))
     }
+}
+
+/// Write a minimal HTTP/1.1 `GET` and read the whole response. Generic over the stream so it serves both the
+/// raw Tor `DataStream` (http) and a TLS stream over it (https).
+async fn http_exchange<S>(mut stream: S, host: &str, path: &str, ua: &str) -> Result<Page>
+where
+    S: AsyncReadExt + AsyncWriteExt + Unpin,
+{
+    let req = format!(
+        "GET {path} HTTP/1.1\r\nHost: {host}\r\nUser-Agent: {ua}\r\n\
+Accept: text/html\r\nConnection: close\r\n\r\n"
+    );
+    stream.write_all(req.as_bytes()).await.context("send request")?;
+    stream.flush().await.context("flush request")?; // Arti buffers a partial cell until flush.
+    let mut buf = Vec::new();
+    stream.read_to_end(&mut buf).await.context("read response")?;
+    Ok(parse_response(&buf))
+}
+
+/// A TLS client connector trusting the Mozilla root store, using the pure-Rust `ring` crypto provider.
+fn tls_connector() -> TlsConnector {
+    let roots = rustls::RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+    let config = rustls::ClientConfig::builder_with_provider(Arc::new(rustls::crypto::ring::default_provider()))
+        .with_safe_default_protocol_versions()
+        .expect("ring provider supports the default TLS versions")
+        .with_root_certificates(roots)
+        .with_no_client_auth();
+    TlsConnector::from(Arc::new(config))
 }
 
 /// Parse a raw HTTP/1.1 response into a [`Page`]: status code, `Content-Type`, and body (de-chunked if the

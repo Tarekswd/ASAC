@@ -37,14 +37,14 @@ potarek/
 | `asac-decoy` | lib | Generate benign decoy queries from a caller-supplied vetted term list. | 4.3 | real, tested |
 | `asac-pir` | lib | PIR so the server can't learn the query. First scheme: trivial PIR (server sends whole small index). | 4.4 | real, tested |
 | `asac-safety` | lib | Pre-index content-safety filter (hash + keyword blocklists + required partner seam); fails closed. | 4.3 #2 | real, tested |
-| `asac-index` | lib | BM25 full-text index (Tantivy); inserts gated by asac-safety; stores title/url/body/links. | 4.3 #3 | real, tested |
+| `asac-index` | lib | BM25 full-text index (Tantivy); inserts gated by asac-safety; stores title/url/body/links. In-RAM (`new`) or persistent on disk (`open_or_create`); inserts upsert by URL so re-crawls refresh. | 4.3 #3 | real, tested |
 | `asac-search` | lib | End-to-end private search: wires asac-index results into asac-pir single-server PIR over a public vocabulary (top-1-per-term cache), so a term lookup fetches its result without the server learning the term. | 4.3 #6 | real, tested |
 | `asac-crawler` | lib | Polite, robots-respecting crawl core: fetch behind a `Fetcher` trait (onion = arti-client, clear-web = Scrapling over Tor), extract title/text/links (HTML only, no JS), scope + frontier, output feeds asac-index. | 4.3 #1 | real, tested (core; Scrapling clear-web backend pending) |
-| `asac-frontend` | lib | Renders the results page as one self-contained HTML document (no JS, no third-party resources, no cookies); escapes all untrusted query/result data and only links http(s) URLs. | 4.3 #5 | real, tested (served live by asac-server; Equi-X PoW pending) |
-| `asac-fetch` | lib | Live `Fetcher` backend for asac-crawler: HTTP over Tor via `arti-client` (onion + clear-web), bridging the sync trait to arti's async client. http-only; de-chunks and reads UTF-8 bodies. | 4.3 #1 | real; response parsing tested, live path manual |
+| `asac-frontend` | lib | Renders the results page as one self-contained HTML document (no JS, no third-party resources, no cookies); escapes all untrusted query/result data and only links http(s) URLs. | 4.3 #5 | real, tested (served live by asac-server; Equi-X PoW via its opt-in `pow` feature) |
+| `asac-fetch` | lib | Live `Fetcher` backend for asac-crawler: HTTP(S) over Tor via `arti-client` (onion + clear-web), bridging the sync trait to arti's async client. https uses rustls/ring + Mozilla roots over the Tor stream; de-chunks and reads UTF-8 bodies (no gzip). | 4.3 #1 | real; response parsing tested, live path manual |
 | `asac-site` | lib | Search glue: request target (or raw query) -> `asac-index` -> `asac-frontend` HTML page. The function a live front end calls per request. | 4.3 #5/#6 | real, tested |
 | `asac-demo` | bin | Live end-to-end: crawl a seed over Tor, index it (safety-gated), answer one query as an HTML page. | 4 | real; manual (needs live Tor) |
-| `asac-server` | bin | Serve ASAC as a v3 onion service: crawl seeds, index, then answer each incoming request with a rendered HTML page over the onion stream (`arti` `launch_onion_service`). http on the onion; sequential; Equi-X PoW pending. | 4.3 #5 | real; request parse/response tested, live serving manual |
+| `asac-server` | bin | Serve ASAC as a v3 onion service: crawl seeds, persist+upsert into an on-disk index, then answer each request with a rendered HTML page over the onion stream (`arti` `launch_onion_service`). http on the onion; sequential; Equi-X PoW via the opt-in `pow` feature (LGPL `equix`). | 4.3 #5 | real; request parse/response + config tested, live serving manual |
 
 ## Crates planned (not yet created)
 

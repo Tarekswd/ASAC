@@ -2,15 +2,19 @@
 //!
 //! Stores only title, URL, extracted body text, and outgoing links (PLAN.md 4.3 #3). **Every insert passes
 //! through `asac-safety` first** ([`AsacIndex::add`]): a document the content filter blocks is never indexed.
-//! This is the in-memory prototype; a real deployment would use a persistent directory and feed the stored
-//! records to `asac-pir` for private retrieval.
+//! Use [`AsacIndex::new`] for an in-memory index (tests/one-shot) or [`AsacIndex::open_or_create`] for a
+//! persistent one on disk that survives restarts. Inserts upsert by URL, so re-crawling refreshes a page
+//! rather than duplicating it.
+
+use std::path::Path;
 
 pub use asac_safety::{ContentFilter, HashMatchBackend, Verdict};
 use tantivy::collector::TopDocs;
+use tantivy::directory::MmapDirectory;
 use tantivy::doc;
 use tantivy::query::QueryParser;
 use tantivy::schema::{Field, Schema, STORED, STRING, TEXT};
-use tantivy::{DocAddress, Document, Index, IndexWriter, Score, TantivyDocument};
+use tantivy::{DocAddress, Document, Index, IndexWriter, Score, TantivyDocument, Term};
 
 /// One search hit: the BM25 relevance score and the stored document as JSON.
 pub struct Hit {
@@ -49,17 +53,36 @@ pub struct AsacIndex {
 }
 
 impl AsacIndex {
-    /// Create an in-memory index with the ASAC schema.
-    pub fn new() -> tantivy::Result<Self> {
+    /// The ASAC schema and its fields (shared by the in-RAM and on-disk constructors).
+    fn schema_fields() -> (Schema, Field, Field, Field, Field) {
         let mut b = Schema::builder();
         let title = b.add_text_field("title", TEXT | STORED);
-        let url = b.add_text_field("url", STRING | STORED); // URLs stored verbatim, not tokenized
+        let url = b.add_text_field("url", STRING | STORED); // URLs stored verbatim, not tokenized (one term)
         let body = b.add_text_field("body", TEXT | STORED);
         let links = b.add_text_field("links", STORED);
-        let schema = b.build();
-        let index = Index::create_in_ram(schema.clone());
+        (b.build(), title, url, body, links)
+    }
+
+    fn from_index(index: Index, schema: Schema, fields: (Field, Field, Field, Field)) -> tantivy::Result<Self> {
         let writer = index.writer(50_000_000)?;
+        let (title, url, body, links) = fields;
         Ok(Self { index, schema, writer, title, url, body, links })
+    }
+
+    /// Create an in-memory index with the ASAC schema.
+    pub fn new() -> tantivy::Result<Self> {
+        let (schema, title, url, body, links) = Self::schema_fields();
+        let index = Index::create_in_ram(schema.clone());
+        Self::from_index(index, schema, (title, url, body, links))
+    }
+
+    /// Open a persistent on-disk index at `dir`, creating it (and the directory) if absent. Reopening the same
+    /// directory keeps everything indexed on the previous run.
+    pub fn open_or_create(dir: &Path) -> tantivy::Result<Self> {
+        std::fs::create_dir_all(dir)?;
+        let (schema, title, url, body, links) = Self::schema_fields();
+        let index = Index::open_or_create(MmapDirectory::open(dir)?, schema.clone())?;
+        Self::from_index(index, schema, (title, url, body, links))
     }
 
     /// Run the safety filter, then index the document only if it is allowed. Returns the filter's [`Verdict`];
@@ -77,6 +100,8 @@ impl AsacIndex {
         if matches!(verdict, Verdict::Block(_)) {
             return Ok(verdict);
         }
+        // Upsert: drop any previously-committed doc with this URL so a re-crawl refreshes rather than dupes.
+        self.writer.delete_term(Term::from_field_text(self.url, url));
         self.writer.add_document(doc!(
             self.title => title,
             self.url => url,
@@ -167,6 +192,41 @@ mod tests {
         assert_eq!(hits[0].url, "http://x/rust");
         assert!(hits[0].body.contains("ownership"));
         assert_eq!(hits[0].links, "http://x/a");
+    }
+
+    fn temp_dir(tag: &str) -> std::path::PathBuf {
+        let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+        std::env::temp_dir().join(format!("asac-index-test-{tag}-{}-{nanos}", std::process::id()))
+    }
+
+    #[test]
+    fn on_disk_index_survives_reopen() {
+        let dir = temp_dir("persist");
+        {
+            let mut idx = AsacIndex::open_or_create(&dir).unwrap();
+            let f = ContentFilter::new(NoKnownIllegal);
+            idx.add(&f, "Persisted", "http://x/p", "durable body text", "").unwrap();
+            idx.commit().unwrap();
+        } // writer/index dropped, mimicking a restart
+        let idx = AsacIndex::open_or_create(&dir).unwrap();
+        let hits = idx.search_docs("durable", 5).unwrap();
+        assert_eq!(hits.len(), 1, "doc indexed in the previous session must still be there");
+        assert_eq!(hits[0].title, "Persisted");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn re_adding_same_url_upserts_not_duplicates() {
+        let mut idx = AsacIndex::new().unwrap();
+        let f = ContentFilter::new(NoKnownIllegal);
+        idx.add(&f, "Old Title", "http://x/same", "alpha keyword", "").unwrap();
+        idx.commit().unwrap();
+        idx.add(&f, "New Title", "http://x/same", "alpha keyword refreshed", "").unwrap();
+        idx.commit().unwrap();
+
+        let hits = idx.search_docs("alpha", 10).unwrap();
+        assert_eq!(hits.len(), 1, "same URL must not produce a duplicate");
+        assert_eq!(hits[0].title, "New Title", "latest crawl wins");
     }
 
     #[test]

@@ -13,7 +13,9 @@ asac-crawler = { path = "../asac-crawler" }
 # Mirror potato's exact Arti feature set (rustls, no system OpenSSL/sqlite). See crates/potato/Cargo.toml.
 arti-client = { version = "=0.47.0", default-features = false, features = ["tokio", "rustls", "compression", "static-sqlite"] }
 tor-rtcompat = { version = "=0.47.0", features = ["tokio", "rustls"] }
-tokio = { version = "1", features = ["rt-multi-thread"] }
-futures = "0.3"
+tokio = { version = "1", features = ["rt-multi-thread", "io-util"] }
+# TLS over the Tor stream for https: ring provider (pure-Rust; avoids tokio-rustls' default aws-lc-rs C lib).
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "logging", "tls12"] }
+webpki-roots = "1"
 url = "2.5.8"
 anyhow = "1"

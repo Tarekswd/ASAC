@@ -58,7 +58,9 @@ fn main() -> Result<()> {
     eprintln!("crawled {} page(s)", docs.len());
     drop(fetcher);
 
-    let mut index = AsacIndex::new()?;
+    // Persistent index per nickname: survives restarts, and add() upserts by URL so this re-crawl refreshes.
+    let index_dir = std::path::PathBuf::from(format!("asac-index-{nickname}"));
+    let mut index = AsacIndex::open_or_create(&index_dir)?;
     let filter = ContentFilter::new(NoKnownIllegal);
     for d in &docs {
         index.add(&filter, &d.title, &d.url, &d.text, &d.links.join("\n"))?;
@@ -75,7 +77,11 @@ async fn serve(index: AsacIndex, nickname: &str) -> Result<()> {
     let client = TorClient::create_bootstrapped(TorClientConfig::default()).await?;
 
     let nick = HsNickname::new(nickname.to_string()).map_err(|e| anyhow!("invalid nickname: {e}"))?;
-    let svc_cfg = OnionServiceConfigBuilder::default().nickname(nick).build()?;
+    let mut cfg_builder = OnionServiceConfigBuilder::default();
+    cfg_builder.nickname(nick);
+    #[cfg(feature = "pow")]
+    cfg_builder.enable_pow(true); // require Equi-X proof-of-work under load (see the `pow` cargo feature)
+    let svc_cfg = cfg_builder.build()?;
     let (service, requests) = client
         .launch_onion_service(svc_cfg)?
         .ok_or_else(|| anyhow!("onion service is disabled in the configuration"))?;

@@ -8,6 +8,12 @@ rust-version.workspace = true
 publish = false
 description = "Serve ASAC as a v3 onion service: crawl seeds over Tor, index them, then answer each incoming request with a rendered HTML page over the onion stream."
 
+[features]
+# Equi-X proof-of-work DoS defense (PLAN 4.3 #5). Opt-in because arti's hs-pow-full is experimental and pulls
+# the LGPL-3.0 `equix` crate into this otherwise MIT/Apache binary -- a licensing choice for the operator.
+# Build/run with: cargo run -p asac-server --features pow -- <nickname> <seed>
+pow = ["arti-client/hs-pow-full"]
+
 [dependencies]
 asac-crawler = { path = "../asac-crawler" }
 asac-fetch = { path = "../asac-fetch" }
