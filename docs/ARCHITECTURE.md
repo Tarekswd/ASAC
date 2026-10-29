@@ -14,7 +14,8 @@ potarek/
 │   ├── potato-policy/      # lib: routing Modes + privacy-over-latency policy (PLAN 2.2, 3.3, 3.7)
 │   ├── potato-bench/       # bin: SOCKS5 benchmark (connect/TTFB/throughput) (PLAN 6)
 │   ├── asac-decoy/      # lib: client-side decoy-query generator (PLAN 4.3 item 7)
-│   └── asac-pir/        # lib: private information retrieval for trustless query privacy (PLAN 4.4)
+│   ├── asac-pir/        # lib: private information retrieval for trustless query privacy (PLAN 4.4)
+│   └── asac-safety/     # lib: pre-index content-safety filter, launch blocker (PLAN 4.3 #2)
 └── docs/
 ```
 
@@ -27,6 +28,7 @@ potarek/
 | `potato-bench` | bin | SOCKS5 benchmark: connect/TTFB/total/throughput through any proxy. | 6 | real, tested + live |
 | `asac-decoy` | lib | Generate benign decoy queries from a caller-supplied vetted term list. | 4.3 | real, tested |
 | `asac-pir` | lib | PIR so the server can't learn the query. First scheme: trivial PIR (server sends whole small index). | 4.4 | real, tested |
+| `asac-safety` | lib | Pre-index content-safety filter (hash + keyword blocklists + required partner seam); fails closed. | 4.3 #2 | real, tested |
 
 ## Crates planned (not yet created)
 
@@ -40,7 +42,6 @@ These are named here so the module boundaries are agreed before code lands. Each
 | `asac-crawler` | Onion crawler (Rust/`arti-client`) + clear-web crawler (Scrapling, HTTP-only over Tor). | 4.3 #1 | 4 |
 | `asac-index` | Full-text index over Tantivy (BM25), storing title/URL/text/links only. | 4.3 #3 | 4 |
 | `asac-frontend` | v3 onion service front end with Equi-X PoW, static HTML, no JS. | 4.3 #5 | 4 |
-| `asac-safety` | Pre-index content-safety filter (launch blocker). | 4.3 #2 | 4 |
 
 ## Hard rules the layout enforces
 
