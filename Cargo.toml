@@ -15,6 +15,7 @@ members = [
     "crates/asac-site",
     "crates/asac-fetch",
     "crates/asac-demo",
+    "crates/asac-server",
 ]
 
 [workspace.package]

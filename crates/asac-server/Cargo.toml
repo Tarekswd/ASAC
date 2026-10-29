@@ -1,0 +1,24 @@
+[package]
+name = "asac-server"
+version = "0.0.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish = false
+description = "Serve ASAC as a v3 onion service: crawl seeds over Tor, index them, then answer each incoming request with a rendered HTML page over the onion stream."
+
+[dependencies]
+asac-crawler = { path = "../asac-crawler" }
+asac-fetch = { path = "../asac-fetch" }
+asac-index = { path = "../asac-index" }
+asac-site = { path = "../asac-site" }
+# onion-service-service enables TorClient::launch_onion_service (off by default); rest mirrors potato/asac-fetch.
+arti-client = { version = "=0.47.0", default-features = false, features = ["tokio", "rustls", "compression", "static-sqlite", "onion-service-service"] }
+tor-hsservice = "=0.47.0"
+tor-cell = "=0.47.0"
+# HsId hides the .onion address behind safelog redaction; DisplayRedacted::display_unredacted prints it.
+safelog = "0.10"
+tokio = { version = "1", features = ["rt-multi-thread"] }
+futures = "0.3"
+anyhow = "1"
