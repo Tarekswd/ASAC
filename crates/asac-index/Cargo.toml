@@ -1,0 +1,13 @@
+[package]
+name = "asac-index"
+version = "0.0.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish = false
+description = "Full-text BM25 index (Tantivy) for the ASAC search engine, gated by asac-safety (PLAN.md 4.3 #3)."
+
+[dependencies]
+tantivy = "=0.27.0"
+asac-safety = { path = "../asac-safety" }

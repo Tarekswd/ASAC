@@ -8,6 +8,7 @@ members = [
     "crates/potato-bench",
     "crates/asac-pir",
     "crates/asac-safety",
+    "crates/asac-index",
 ]
 
 [workspace.package]

@@ -29,6 +29,7 @@ potarek/
 | `asac-decoy` | lib | Generate benign decoy queries from a caller-supplied vetted term list. | 4.3 | real, tested |
 | `asac-pir` | lib | PIR so the server can't learn the query. First scheme: trivial PIR (server sends whole small index). | 4.4 | real, tested |
 | `asac-safety` | lib | Pre-index content-safety filter (hash + keyword blocklists + required partner seam); fails closed. | 4.3 #2 | real, tested |
+| `asac-index` | lib | BM25 full-text index (Tantivy); inserts gated by asac-safety; stores title/url/body/links. | 4.3 #3 | real, tested |
 
 ## Crates planned (not yet created)
 
