@@ -154,7 +154,11 @@ impl AsacReader {
         let reader = self.index.reader()?;
         let searcher = reader.searcher();
         let parser = QueryParser::for_index(&self.index, vec![self.title, self.body]);
-        let parsed = parser.parse_query(query)?;
+        // An unparseable user query yields no results (never an error) -- so the serving path has no
+        // query-derived error to log, upholding the no-query-log policy (PLAN 4.3 #6).
+        let Ok(parsed) = parser.parse_query(query) else {
+            return Ok(Vec::new());
+        };
         let top: Vec<(Score, DocAddress)> =
             searcher.search(&parsed, &TopDocs::with_limit(limit).order_by_score())?;
         let mut hits = Vec::with_capacity(top.len());
@@ -259,6 +263,18 @@ mod tests {
         let hits = idx.search_docs("alpha", 10).unwrap();
         assert_eq!(hits.len(), 1, "same URL must not produce a duplicate");
         assert_eq!(hits[0].title, "New Title", "latest crawl wins");
+    }
+
+    #[test]
+    fn unparseable_query_yields_empty_not_error() {
+        // No-query-log policy: a malformed query must not produce an error (which could carry the query);
+        // it returns no results instead.
+        let mut idx = AsacIndex::new().unwrap();
+        let f = ContentFilter::new(NoKnownIllegal);
+        idx.add(&f, "Doc", "http://x/d", "some body", "").unwrap();
+        idx.commit().unwrap();
+        let hits = idx.search_docs("\"unbalanced quote", 5).unwrap();
+        assert!(hits.is_empty());
     }
 
     #[test]

@@ -132,7 +132,8 @@ where
 {
     let head = read_request_head(&mut stream).await?;
     let target = parse_request_target(&head).unwrap_or_else(|| "/".to_string());
-    let html = handle(reader, &target, MAX_RESULTS)?;
+    // Drop the underlying error detail: it could echo the query, and we never log queries (PLAN 4.3 #6).
+    let html = handle(reader, &target, MAX_RESULTS).map_err(|_| anyhow!("search failed"))?;
     stream.write_all(http_response(&html).as_bytes()).await?;
     stream.flush().await?; // Arti buffers a partial cell until flush.
     Ok(())
