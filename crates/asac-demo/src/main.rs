@@ -45,6 +45,6 @@ fn main() -> anyhow::Result<()> {
     index.commit()?;
 
     eprintln!("answering query {query:?}...");
-    print!("{}", search_page(&index, query, 10)?);
+    print!("{}", search_page(&index.reader(), query, 10)?);
     Ok(())
 }

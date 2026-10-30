@@ -117,6 +117,38 @@ impl AsacIndex {
         Ok(())
     }
 
+    /// A cheap, cloneable, `Send + Sync` read handle for serving searches concurrently (e.g. one per request).
+    /// It reflects everything committed so far and keeps reflecting later commits.
+    pub fn reader(&self) -> AsacReader {
+        AsacReader {
+            index: self.index.clone(),
+            schema: self.schema.clone(),
+            title: self.title,
+            body: self.body,
+        }
+    }
+
+    /// BM25 search over title + body; returns up to `limit` hits, most relevant first.
+    pub fn search(&self, query: &str, limit: usize) -> tantivy::Result<Vec<Hit>> {
+        self.reader().search(query, limit)
+    }
+
+    /// Like [`AsacIndex::search`] but returns each hit's stored fields already parsed out.
+    pub fn search_docs(&self, query: &str, limit: usize) -> tantivy::Result<Vec<DocHit>> {
+        self.reader().search_docs(query, limit)
+    }
+}
+
+/// A read-only, cloneable handle onto an index's committed data. Safe to share across threads/tasks.
+#[derive(Clone)]
+pub struct AsacReader {
+    index: Index,
+    schema: Schema,
+    title: Field,
+    body: Field,
+}
+
+impl AsacReader {
     /// BM25 search over title + body; returns up to `limit` hits, most relevant first.
     pub fn search(&self, query: &str, limit: usize) -> tantivy::Result<Vec<Hit>> {
         let reader = self.index.reader()?;
@@ -133,7 +165,7 @@ impl AsacIndex {
         Ok(hits)
     }
 
-    /// Like [`AsacIndex::search`] but returns each hit's stored fields already parsed out (title/url/body/
+    /// Like [`AsacReader::search`] but returns each hit's stored fields already parsed out (title/url/body/
     /// links), so callers don't re-parse the JSON.
     pub fn search_docs(&self, query: &str, limit: usize) -> tantivy::Result<Vec<DocHit>> {
         Ok(self

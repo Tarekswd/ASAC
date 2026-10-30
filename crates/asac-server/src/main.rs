@@ -21,7 +21,7 @@ use anyhow::{anyhow, Result};
 use arti_client::{TorClient, TorClientConfig};
 use asac_crawler::{crawl, CrawlConfig};
 use asac_fetch::TorFetcher;
-use asac_index::{AsacIndex, ContentFilter, HashMatchBackend};
+use asac_index::{AsacIndex, AsacReader, ContentFilter, HashMatchBackend};
 use asac_site::handle;
 use futures::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use futures::StreamExt;
@@ -94,31 +94,45 @@ async fn serve(index: AsacIndex, nickname: &str) -> Result<()> {
         None => eprintln!("serving (onion address not yet available)"),
     }
 
-    // handle_rend_requests accepts rendezvous requests and yields per-client stream requests.
+    // A cheap, shareable read handle; each request task gets its own clone (reflects later commits).
+    let reader = std::sync::Arc::new(index.reader());
+
+    // handle_rend_requests accepts rendezvous requests and yields per-client stream requests. Serve each on
+    // its own task so slow clients don't block others, and stop cleanly on Ctrl-C.
     let mut streams = Box::pin(handle_rend_requests(requests));
-    while let Some(req) = streams.next().await {
-        let stream = match req.accept(Connected::new_empty()).await {
-            Ok(s) => s,
-            Err(e) => {
-                eprintln!("accept failed: {e}");
-                continue;
+    loop {
+        tokio::select! {
+            maybe_req = streams.next() => {
+                let Some(req) = maybe_req else { break };
+                let reader = reader.clone();
+                tokio::spawn(async move {
+                    let stream = match req.accept(Connected::new_empty()).await {
+                        Ok(s) => s,
+                        Err(e) => { eprintln!("accept failed: {e}"); return; }
+                    };
+                    if let Err(e) = serve_one(stream, &reader).await {
+                        eprintln!("request failed: {e}");
+                    }
+                });
             }
-        };
-        if let Err(e) = serve_one(stream, &index).await {
-            eprintln!("request failed: {e}");
+            _ = tokio::signal::ctrl_c() => {
+                eprintln!("shutting down (Ctrl-C)...");
+                break;
+            }
         }
     }
+    drop(service); // stop advertising the onion service
     Ok(())
 }
 
 /// Read one request off the stream, render its results page, and write the HTTP response.
-async fn serve_one<S>(mut stream: S, index: &AsacIndex) -> Result<()>
+async fn serve_one<S>(mut stream: S, reader: &AsacReader) -> Result<()>
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {
     let head = read_request_head(&mut stream).await?;
     let target = parse_request_target(&head).unwrap_or_else(|| "/".to_string());
-    let html = handle(index, &target, MAX_RESULTS)?;
+    let html = handle(reader, &target, MAX_RESULTS)?;
     stream.write_all(http_response(&html).as_bytes()).await?;
     stream.flush().await?; // Arti buffers a partial cell until flush.
     Ok(())

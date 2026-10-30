@@ -44,7 +44,7 @@ potarek/
 | `asac-fetch` | lib | Live `Fetcher` backend for asac-crawler: HTTP(S) over Tor via `arti-client` (onion + clear-web), bridging the sync trait to arti's async client. https uses rustls/ring + Mozilla roots over the Tor stream; follows up to 5 redirects; de-chunks and reads UTF-8 bodies (no gzip). | 4.3 #1 | real; response parsing + redirects tested, live http+https verified |
 | `asac-site` | lib | Search glue: request target (or raw query) -> `asac-index` -> `asac-frontend` HTML page. The function a live front end calls per request. | 4.3 #5/#6 | real, tested |
 | `asac-demo` | bin | Live end-to-end: crawl a seed over Tor, index it (safety-gated), answer one query as an HTML page. | 4 | real; manual (needs live Tor) |
-| `asac-server` | bin | Serve ASAC as a v3 onion service: crawl seeds, persist+upsert into an on-disk index, then answer each request with a rendered HTML page over the onion stream (`arti` `launch_onion_service`). http on the onion; sequential; Equi-X PoW via the opt-in `pow` feature (LGPL `equix`). | 4.3 #5 | real; request parse/response + config tested, live serving manual |
+| `asac-server` | bin | Serve ASAC as a v3 onion service: crawl seeds, persist+upsert into an on-disk index, then answer each request with a rendered HTML page over the onion stream (`arti` `launch_onion_service`). http on the onion; one task per request; graceful Ctrl-C shutdown; Equi-X PoW via the opt-in `pow` feature (LGPL `equix`). | 4.3 #5 | real; request parse/response + config tested, live serving manual |
 
 ## Crates planned (not yet created)
 

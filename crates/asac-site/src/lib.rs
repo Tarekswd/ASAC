@@ -5,7 +5,7 @@
 //! self-contained HTML page. It holds no state and does no I/O, so it is unit-tested offline.
 
 use asac_frontend::{query_from_target, render_home, render_results, ResultItem};
-use asac_index::AsacIndex;
+use asac_index::AsacReader;
 
 /// Max characters of body text shown as a result snippet.
 const SNIPPET_CHARS: usize = 200;
@@ -22,7 +22,7 @@ fn snippet(body: &str) -> String {
 
 /// Run `query` against the index and render the results page. (Rendering escapes all fields — see
 /// [`asac_frontend`].)
-pub fn search_page(index: &AsacIndex, query: &str, limit: usize) -> tantivy::Result<String> {
+pub fn search_page(index: &AsacReader, query: &str, limit: usize) -> tantivy::Result<String> {
     let items: Vec<ResultItem> = index
         .search_docs(query, limit)?
         .into_iter()
@@ -37,7 +37,7 @@ pub fn search_page(index: &AsacIndex, query: &str, limit: usize) -> tantivy::Res
 
 /// Handle a raw request target (e.g. `/search?q=rust`): the home page when there is no query, otherwise the
 /// results page for it.
-pub fn handle(index: &AsacIndex, target: &str, limit: usize) -> tantivy::Result<String> {
+pub fn handle(index: &AsacReader, target: &str, limit: usize) -> tantivy::Result<String> {
     match query_from_target(target) {
         Some(q) => search_page(index, &q, limit),
         None => Ok(render_home()),
@@ -47,7 +47,7 @@ pub fn handle(index: &AsacIndex, target: &str, limit: usize) -> tantivy::Result<
 #[cfg(test)]
 mod tests {
     use super::*;
-    use asac_index::{ContentFilter, HashMatchBackend};
+    use asac_index::{AsacIndex, ContentFilter, HashMatchBackend};
 
     struct NoKnownIllegal;
     impl HashMatchBackend for NoKnownIllegal {
@@ -68,7 +68,7 @@ mod tests {
     #[test]
     fn query_target_renders_the_matching_result() {
         let idx = index();
-        let html = handle(&idx, "/search?q=memory+safety", 10).unwrap();
+        let html = handle(&idx.reader(), "/search?q=memory+safety", 10).unwrap();
         assert!(html.contains("<a href=\"http://site.example/rust\">Rust Language</a>"));
         assert!(html.contains("systems programming"), "snippet should show body text");
     }
@@ -76,7 +76,7 @@ mod tests {
     #[test]
     fn empty_target_shows_home_not_results() {
         let idx = index();
-        let html = handle(&idx, "/", 10).unwrap();
+        let html = handle(&idx.reader(), "/", 10).unwrap();
         assert!(html.contains("<form"));
         assert!(!html.contains("<ol>"), "home page has no results list");
     }
@@ -84,7 +84,7 @@ mod tests {
     #[test]
     fn no_match_renders_empty_results_page() {
         let idx = index();
-        let html = search_page(&idx, "zzzznotacorpusword", 10).unwrap();
+        let html = search_page(&idx.reader(), "zzzznotacorpusword", 10).unwrap();
         assert!(html.contains("No results"));
     }
 }
