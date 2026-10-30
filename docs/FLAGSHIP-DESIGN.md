@@ -151,8 +151,11 @@ Each is a normal, testable step like the ones already shipped; crates in parenth
   retrieval for a secret term, no public term directory (`asac_search::PrivateKeyword`). Fixed bucket width =
   constant response size across terms. Tests cover correct posting lists, absent terms, and the posting-list
   cap. Query budget scales with sqrt(buckets) (PIANO). Remaining for the flagship: F2–F6 below.
-- **F2** Rank + fetch the top result rows privately (compose F1 with the existing record PIR); replace the
-  top-1-per-term cache.
+- **F2 — done (unranked).** Compose F1 with a second PIANO instance keyed by doc id
+  (`asac_search::PrivateCorpus`): a secret term privately fetches its posting list, then privately fetches each
+  document record — the server learns neither the term nor which docs. Remaining: rank the posting list before
+  fetching the top rows (needs the authority/BM25 signal inside the private path), and wire real index records
+  in place of the test corpus.
 - **F3** Scale work: sharding + width caps + top-N corpus; Shadow cost measurement vs targets (§4, §7).
 - **F4** `asac-mix`: client cover-traffic + Poisson-delay scheduler + mix/provider interface skeleton
   (offline-testable scheduler; live transport later).

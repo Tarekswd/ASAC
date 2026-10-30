@@ -195,6 +195,88 @@ impl PrivateKeyword {
     }
 }
 
+// ---------------------------------------------------------------------------
+// F2 (FLAGSHIP-DESIGN.md): compose keyword PIR with a document-record PIR.
+//
+// A full private search: the client PIR-fetches the term's posting list (F1, server learns neither bucket nor
+// term), then PIR-fetches each matching document record from a SECOND PIANO instance keyed by doc id (server
+// learns neither which rows are fetched). So the operator sees two fixed-shape PIR queries and learns neither
+// the query term nor which results were returned.
+//
+// shortcut: two independent PIANO instances, each with its own query budget (~sqrt(n) lookups); documents are
+// fixed-width records (truncated/padded). Ranking of the posting list, scale (sharding), and the formal
+// argument are F2-rank/F3/F6 in FLAGSHIP-DESIGN.md.
+
+/// A private corpus: term -> posting list -> document records, all retrieved via PIR.
+pub struct PrivateCorpus {
+    keywords: PrivateKeyword,
+    doc_perm: Permutation,
+    doc_db: SingleServerDb,
+    doc_hints: ClientState,
+    n_docs: usize, // padded, perfect square
+}
+
+impl PrivateCorpus {
+    /// Build from `doc_records` (record `i` is document id `i`, fixed to `doc_width`) and `keyword_entries`
+    /// (term -> doc ids). Builds a PIR instance for the documents and the F1 keyword table.
+    pub fn build<S: AsRef<str>>(
+        doc_records: &[Vec<u8>],
+        keyword_entries: &[(S, Vec<u32>)],
+        doc_width: usize,
+        seed: u64,
+    ) -> Self {
+        let n = perfect_square_at_least(doc_records.len().max(1));
+        let mut recs: Vec<Vec<u8>> = doc_records
+            .iter()
+            .map(|r| {
+                let mut v = r.clone();
+                v.truncate(doc_width);
+                v.resize(doc_width, 0);
+                v
+            })
+            .collect();
+        while recs.len() < n {
+            recs.push(vec![0u8; doc_width]);
+        }
+
+        let doc_perm = Permutation::from_seed(n, seed);
+        let mut permuted = vec![Vec::new(); n];
+        for (logical, rec) in recs.iter().enumerate() {
+            permuted[doc_perm.physical(logical)] = rec.clone();
+        }
+        let doc_db = SingleServerDb::from_records(&permuted);
+        let s = (n as f64).sqrt() as usize;
+        let doc_hints = preprocess_streaming(
+            n,
+            doc_width,
+            Params::for_sqrt_n(s),
+            seed.wrapping_add(1),
+            permuted.iter().cloned(),
+        );
+
+        let keywords = PrivateKeyword::build(keyword_entries, seed.wrapping_add(2));
+        Self { keywords, doc_perm, doc_db, doc_hints, n_docs: n }
+    }
+
+    /// Privately search `term`: fetch its posting list, then fetch each document record. Returns the records
+    /// (trailing NUL padding trimmed) in posting-list order. The server learns neither the term nor the docs.
+    pub fn search(&mut self, term: &str) -> Vec<Vec<u8>> {
+        let ids = self.keywords.lookup(term).unwrap_or_default();
+        let server = Server::new(&self.doc_db);
+        let mut out = Vec::with_capacity(ids.len());
+        for &id in &ids {
+            let id = id as usize;
+            if id >= self.n_docs {
+                continue; // stale/out-of-range posting entry
+            }
+            let rec = logical_query(&mut self.doc_hints, &self.doc_perm, id, &server);
+            let end = rec.iter().rposition(|&b| b != 0).map_or(0, |p| p + 1);
+            out.push(rec[..end].to_vec());
+        }
+        out
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -271,5 +353,23 @@ mod tests {
         let got = kw.lookup("many").expect("present");
         assert_eq!(got.len(), MAX_DOCS_PER_TERM, "posting list is truncated to the fixed cap");
         assert_eq!(got[0], 0);
+    }
+
+    #[test]
+    fn private_corpus_fetches_docs_for_a_secret_term() {
+        // 16 docs so both PIR budgets (keyword + doc) comfortably cover the lookups.
+        let docs: Vec<Vec<u8>> = (0..16).map(|i| format!("doc{i}:payload").into_bytes()).collect();
+        let keyword_entries = vec![("alpha", vec![0u32, 5, 10]), ("beta", vec![1u32])];
+        let mut corpus = PrivateCorpus::build(&docs, &keyword_entries, 64, 9);
+
+        let hits = corpus.search("alpha");
+        let texts: Vec<String> = hits.iter().map(|r| String::from_utf8_lossy(r).to_string()).collect();
+        assert_eq!(texts.len(), 3, "alpha's three docs, fetched privately");
+        assert!(texts.iter().any(|t| t == "doc0:payload"));
+        assert!(texts.iter().any(|t| t == "doc5:payload"));
+        assert!(texts.iter().any(|t| t == "doc10:payload"));
+
+        assert_eq!(corpus.search("beta"), vec![b"doc1:payload".to_vec()]);
+        assert!(corpus.search("absent").is_empty());
     }
 }
