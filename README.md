@@ -3,9 +3,14 @@
 **ASAC — Anti-Surveillance, Anti-Corruption.** A privacy-first routing layer and onion-service search engine,
 built on Tor and [Arti](https://gitlab.torproject.org/tpo/core/arti).
 
-> **Status: early development.** The Rust workspace, test network, and the Balanced client (Phases 0-1) are
-> built and tested; the flagship private-search work (PIR) is in progress. See [PLAN.md](PLAN.md). Not yet
-> ready to rely on for real-world privacy.
+> **Status: working prototype, not audited.** The Balanced client (Phases 0-1) and the full search engine
+> pipeline — crawl over Tor, safety filter, BM25 index with persistence/freshness, authority ranking, and a
+> concurrent v3 onion-service front end — are built and tested, and live crawling over Tor (http + https) is
+> verified end to end. The flagship private-search mechanisms (single-server PIANO PIR, PIR-by-keyword, a
+> private corpus, a Loopix-style cover-traffic scheduler, decoy queries) are built and unit-tested, with their
+> cost measured. **They are tested mechanisms, not a proven guarantee:** no external cryptographer review yet,
+> so do not rely on this for real-world privacy. See [PLAN.md](PLAN.md), [docs/FLAGSHIP-DESIGN.md](docs/FLAGSHIP-DESIGN.md),
+> and [docs/PIR-SECURITY.md](docs/PIR-SECURITY.md).
 
 ---
 
@@ -55,14 +60,21 @@ concrete tasks and the full phase plan are in [PLAN.md](PLAN.md) sections 5 and 
 - **Phase 2** — hybrid post-quantum handshake.
 - **Phase 3+** — Swift/Fortress modes, the ASAC search engine, external audit.
 
+The engine and the flagship *mechanisms* are built and tested in-repo. The parts that still need a network
+simulator, a live deployment, a cryptographer, or legal/partner agreements — and the concrete steps for each —
+are laid out in **[docs/EXTERNAL-PLAN.md](docs/EXTERNAL-PLAN.md)**.
+
 ## Building
 
 **Rust 1.92+ on Linux** (native or WSL). Arti 0.47 requires Rust 1.92, and the build is Linux-first; a
 `rust-toolchain.toml` pins the compiler if you use [rustup](https://rustup.rs).
 
 ```sh
-cargo test --workspace     # build everything and run the tests
-cargo run  -p potato        # bootstrap Tor and fetch example.com over it (needs network)
+cargo test --workspace                          # build everything and run the tests
+cargo run  -p potato                            # bootstrap Tor, fetch example.com over it (needs network)
+cargo run  -p asac-demo -- http://example.com/ domain   # crawl over Tor -> index -> private-ish query (needs network)
+cargo run  -p asac-server -- asac http://<seed>/        # serve ASAC as a v3 onion service (needs network)
+#   ASAC_RECRAWL_SECS=3600 refreshes the index periodically; --features pow enables Equi-X PoW.
 ```
 
 The client uses pure-Rust **rustls** TLS and a **bundled static SQLite**, so no system OpenSSL or libsqlite3
@@ -70,11 +82,39 @@ is needed. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the crate layout
 
 ### Workspace crates
 
+Full detail and status in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+**Potato routing**
+
 | Crate | What it is |
 |-------|------------|
-| `potato` | Client binary: bootstraps a Tor client via `arti-client`; SOCKS proxy is Arti's `arti proxy` for now. |
+| `potato` | Client binary: bootstraps a Tor client via `arti-client`. |
 | `potato-policy` | Routing modes (Swift/Balanced/Fortress) and the privacy-over-latency rules. |
-| `asac-decoy` | Client-side decoy-query generator (self-directed query obfuscation). |
+| `potato-bench` | SOCKS5 benchmark (connect/TTFB/throughput). |
+
+**Search engine**
+
+| Crate | What it is |
+|-------|------------|
+| `asac-crawler` | Polite, robots-respecting crawl core; fetch behind a trait. |
+| `asac-fetch` | Live fetcher: HTTP(S) over Tor via `arti-client` (redirects, gzip). |
+| `asac-safety` | Pre-index content-safety filter (host/hash/keyword blocklists + partner seam); fails closed. |
+| `asac-index` | BM25 full-text index (Tantivy): persistence, upsert, freshness. |
+| `asac-rank` | Ranking v2: PageRank authority + BM25xauthority x freshness blend. |
+| `asac-frontend` | Self-contained HTML results page (no JS/cookies/3rd-party). |
+| `asac-site` | Search glue: request/query -> index -> rendered page. |
+| `asac-server` | Serve ASAC as a v3 onion service; concurrent, graceful shutdown, optional re-crawl + PoW. |
+| `asac-demo` | One-shot live end-to-end (crawl over Tor -> index -> query -> HTML). |
+
+**Flagship privacy (PLAN 4.4)**
+
+| Crate | What it is |
+|-------|------------|
+| `asac-pir` | PIR (trivial, 2-server XOR, single-server PIANO) + sharding, so the server can't learn the query. |
+| `asac-search` | Private search: PIR-by-keyword + a private corpus over the real index. |
+| `asac-mix` | Loopix-style Poisson cover-traffic send scheduler. |
+| `asac-decoy` | Client-side decoy-query generator (vetted term list). |
+| `asac-client` | Client query stream: real searches interleaved with decoys, Poisson-paced. |
 
 ## Contributing
 
