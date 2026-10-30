@@ -16,7 +16,7 @@
 //! Usage: `cargo run -p asac-server -- <nickname> <seed-http-url> [more seeds...]`
 
 use std::process::exit;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use std::thread;
 use std::time::Duration;
 
@@ -71,19 +71,19 @@ fn main() -> Result<()> {
     }
     index.commit()?;
 
-    // Link-graph authority over the crawl, for ranking v2.
-    let pages: Vec<(String, Vec<String>)> = docs.iter().map(|d| (d.url.clone(), d.links.clone())).collect();
-    let authority = Arc::new(Authority::from_pages(&pages));
+    // Link-graph authority over the crawl, for ranking v2. Shared + swappable so a re-crawl can refresh it.
+    let authority: SharedAuthority = Arc::new(RwLock::new(Arc::new(authority_from(&docs))));
 
     // A read handle for serving; cloned before the index (writer) moves to the re-crawl thread (if any).
     let reader = Arc::new(index.reader());
 
     // Optional scheduled re-crawl (ASAC_RECRAWL_SECS=N): refreshes the index in the background while serving;
-    // tantivy readers see each commit. Without it, the index is the one-shot startup crawl.
+    // tantivy readers see each commit and the authority table is recomputed. Without it, the index and
+    // authority are the one-shot startup crawl.
     match recrawl_interval(std::env::var("ASAC_RECRAWL_SECS").ok().as_deref()) {
         Some(interval) => {
             eprintln!("scheduled re-crawl every {}s", interval.as_secs());
-            spawn_recrawl(index, args[2..].to_vec(), interval);
+            spawn_recrawl(index, args[2..].to_vec(), interval, authority.clone());
         }
         None => drop(index),
     }
@@ -91,6 +91,15 @@ fn main() -> Result<()> {
     // Phase 2 (async): serve as an onion service.
     let rt = tokio::runtime::Runtime::new()?;
     rt.block_on(serve(reader, authority, &nickname))
+}
+
+/// A link-authority table shared across request tasks and swappable by the re-crawl thread.
+type SharedAuthority = Arc<RwLock<Arc<Authority>>>;
+
+/// Compute link-graph authority from crawled docs.
+fn authority_from(docs: &[asac_crawler::CrawledDoc]) -> Authority {
+    let pages: Vec<(String, Vec<String>)> = docs.iter().map(|d| (d.url.clone(), d.links.clone())).collect();
+    Authority::from_pages(&pages)
 }
 
 /// Parse `ASAC_RECRAWL_SECS` into a re-crawl interval; `None` means crawl once (no re-crawl).
@@ -101,12 +110,10 @@ fn recrawl_interval(raw: Option<&str>) -> Option<Duration> {
     }
 }
 
-/// Re-crawl `seeds` every `interval` on a dedicated thread, upserting into `index`; serving readers (which
-/// share the underlying index) pick up each commit. Runs the sync `TorFetcher` off the async runtime.
-///
-/// shortcut: refreshes the index (and freshness timestamps) only; link authority is not recomputed until the
-/// process restarts. Recompute authority into a swappable shared handle when that matters.
-fn spawn_recrawl(mut index: AsacIndex, seeds: Vec<String>, interval: Duration) {
+/// Re-crawl `seeds` every `interval` on a dedicated thread, upserting into `index` and recomputing `authority`;
+/// serving readers (which share the underlying index) pick up each commit, and request tasks read the new
+/// authority on their next request. Runs the sync `TorFetcher` off the async runtime.
+fn spawn_recrawl(mut index: AsacIndex, seeds: Vec<String>, interval: Duration, authority: SharedAuthority) {
     thread::spawn(move || {
         let fetcher = match TorFetcher::bootstrap(USER_AGENT) {
             Ok(f) => f,
@@ -129,6 +136,10 @@ fn spawn_recrawl(mut index: AsacIndex, seeds: Vec<String>, interval: Duration) {
             if let Err(e) = index.commit() {
                 eprintln!("re-crawl commit error: {e}");
             }
+            // Refresh the shared authority from this crawl (brief write lock; readers clone the old Arc until).
+            if let Ok(mut slot) = authority.write() {
+                *slot = Arc::new(authority_from(&docs));
+            }
             eprintln!("re-crawled {} page(s)", docs.len());
         }
     });
@@ -136,7 +147,7 @@ fn spawn_recrawl(mut index: AsacIndex, seeds: Vec<String>, interval: Duration) {
 
 async fn serve(
     reader: Arc<AsacReader>,
-    authority: Arc<Authority>,
+    authority: SharedAuthority,
     nickname: &str,
 ) -> Result<()> {
     eprintln!("bootstrapping Tor to serve...");
@@ -168,7 +179,8 @@ async fn serve(
             maybe_req = streams.next() => {
                 let Some(req) = maybe_req else { break };
                 let reader = reader.clone();
-                let authority = authority.clone();
+                // Snapshot the current authority table for this request (a re-crawl may later swap it).
+                let authority = authority.read().map(|a| a.clone()).unwrap_or_else(|_| Arc::new(Authority::empty()));
                 tokio::spawn(async move {
                     let stream = match req.accept(Connected::new_empty()).await {
                         Ok(s) => s,
