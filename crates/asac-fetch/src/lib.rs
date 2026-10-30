@@ -10,8 +10,8 @@
 //! real page instead of being dropped.
 //!
 //! shortcut: `http` and `https` (TLS over the Tor stream via rustls/ring, Mozilla roots from `webpki-roots`);
-//! response bodies are decoded as UTF-8 and de-chunked only for `Transfer-Encoding: chunked`, with no
-//! gzip/deflate handling. Add body decompression when a target needs it.
+//! bodies are de-chunked, then gzip/deflate-decompressed, then read as UTF-8. Brotli/zstd `Content-Encoding`
+//! is passed through undecoded — add it if a target needs it.
 
 use std::sync::Arc;
 
@@ -135,7 +135,7 @@ where
 {
     let req = format!(
         "GET {path} HTTP/1.1\r\nHost: {host}\r\nUser-Agent: {ua}\r\n\
-Accept: text/html\r\nConnection: close\r\n\r\n"
+Accept: text/html\r\nAccept-Encoding: gzip, deflate\r\nConnection: close\r\n\r\n"
     );
     stream.write_all(req.as_bytes()).await.context("send request")?;
     stream.flush().await.context("flush request")?; // Arti buffers a partial cell until flush.
@@ -155,11 +155,20 @@ fn tls_connector() -> TlsConnector {
     TlsConnector::from(Arc::new(config))
 }
 
-/// Parse a raw HTTP/1.1 response into a [`Page`]: status code, `Content-Type`, and body (de-chunked if the
-/// response used chunked transfer encoding). Pure, so it is unit-tested without a network.
+/// Find the first occurrence of `needle` in `hay`.
+fn find_subslice(hay: &[u8], needle: &[u8]) -> Option<usize> {
+    hay.windows(needle.len()).position(|w| w == needle)
+}
+
+/// Parse a raw HTTP/1.1 response into a [`Page`]: status code, `Content-Type`, and body. The body is handled
+/// as bytes (de-chunked, then gzip/deflate-decompressed) before a lossy UTF-8 conversion, so binary
+/// compressed bodies survive. Pure, so it is unit-tested without a network.
 fn parse_response(raw: &[u8]) -> Page {
-    let text = String::from_utf8_lossy(raw);
-    let (head, body_raw) = text.split_once("\r\n\r\n").unwrap_or((text.as_ref(), ""));
+    let (head_bytes, body_bytes) = match find_subslice(raw, b"\r\n\r\n") {
+        Some(i) => (&raw[..i], &raw[i + 4..]),
+        None => (raw, &[][..]),
+    };
+    let head = String::from_utf8_lossy(head_bytes); // headers are ASCII
 
     let mut lines = head.lines();
     let status = lines
@@ -170,39 +179,69 @@ fn parse_response(raw: &[u8]) -> Page {
 
     let mut content_type = String::new();
     let mut chunked = false;
+    let mut encoding = String::new();
     for line in lines {
         if let Some((k, v)) = line.split_once(':') {
             match k.trim().to_ascii_lowercase().as_str() {
                 "content-type" => content_type = v.trim().to_string(),
                 "transfer-encoding" if v.to_ascii_lowercase().contains("chunked") => chunked = true,
+                "content-encoding" => encoding = v.trim().to_ascii_lowercase(),
                 _ => {}
             }
         }
     }
 
-    let body = if chunked { dechunk(body_raw) } else { body_raw.to_string() };
+    let dechunked = if chunked { dechunk(body_bytes) } else { body_bytes.to_vec() };
+    let decoded = decompress(&dechunked, &encoding);
+    let body = String::from_utf8_lossy(&decoded).into_owned();
     Page { status, content_type, body }
 }
 
-/// Decode an HTTP/1.1 chunked body. Assumes UTF-8 (chunk sizes count bytes; `String::from_utf8_lossy` keeps
-/// byte alignment for valid UTF-8, which HTML almost always is — see the module `shortcut` note).
-fn dechunk(mut s: &str) -> String {
-    let mut out = String::new();
-    while let Some(nl) = s.find("\r\n") {
-        let size = usize::from_str_radix(s[..nl].split(';').next().unwrap_or("").trim(), 16).unwrap_or(0);
+/// Decode an HTTP/1.1 chunked transfer body (chunk = hex size line, CRLF, bytes, CRLF; terminated by a 0 size).
+fn dechunk(mut s: &[u8]) -> Vec<u8> {
+    let mut out = Vec::new();
+    while let Some(nl) = find_subslice(s, b"\r\n") {
+        let size_field = s[..nl].split(|&b| b == b';').next().unwrap_or(&[]); // drop any chunk extension
+        let size = std::str::from_utf8(size_field)
+            .ok()
+            .and_then(|h| usize::from_str_radix(h.trim(), 16).ok())
+            .unwrap_or(0);
         s = &s[nl + 2..];
         if size == 0 {
             break;
         }
-        if s.len() < size {
-            out.push_str(s);
-            break;
+        let take = size.min(s.len());
+        out.extend_from_slice(&s[..take]);
+        s = &s[take..];
+        if take < size {
+            break; // truncated
         }
-        out.push_str(&s[..size]);
-        s = &s[size..];
-        s = s.strip_prefix("\r\n").unwrap_or(s);
+        if s.starts_with(b"\r\n") {
+            s = &s[2..];
+        }
     }
     out
+}
+
+/// Decompress a body per its `Content-Encoding` (`gzip`/`deflate`); other encodings (incl. `br`/`zstd`) and
+/// identity pass through unchanged. On any decode error the original bytes are returned rather than lost.
+///
+/// shortcut: handles gzip and deflate (the common two over Tor); brotli/zstd are passed through undecoded —
+/// add them if a target needs them.
+fn decompress(body: &[u8], encoding: &str) -> Vec<u8> {
+    use std::io::Read;
+    let read_all = |mut r: Box<dyn Read>| -> Option<Vec<u8>> {
+        let mut out = Vec::new();
+        r.read_to_end(&mut out).ok().map(|_| out)
+    };
+    match encoding {
+        "gzip" | "x-gzip" => read_all(Box::new(flate2::read::GzDecoder::new(body))).unwrap_or_else(|| body.to_vec()),
+        // HTTP "deflate" is usually zlib-wrapped; fall back to raw deflate.
+        "deflate" => read_all(Box::new(flate2::read::ZlibDecoder::new(body)))
+            .or_else(|| read_all(Box::new(flate2::read::DeflateDecoder::new(body))))
+            .unwrap_or_else(|| body.to_vec()),
+        _ => body.to_vec(),
+    }
 }
 
 #[cfg(test)]
@@ -234,6 +273,39 @@ mod tests {
         let p = parse_response(raw);
         assert_eq!(p.status, 404);
         assert_eq!(p.body, "nope");
+    }
+
+    #[test]
+    fn decodes_gzip_body() {
+        use std::io::Write;
+        let mut enc = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+        enc.write_all(b"<html>hello gzip</html>").unwrap();
+        let gz = enc.finish().unwrap();
+
+        let mut raw = b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Encoding: gzip\r\n\r\n".to_vec();
+        raw.extend_from_slice(&gz);
+
+        let p = parse_response(&raw);
+        assert_eq!(p.status, 200);
+        assert_eq!(p.body, "<html>hello gzip</html>");
+    }
+
+    #[test]
+    fn decodes_chunked_then_gzip() {
+        // Realistic combo: chunked transfer encoding wrapping a gzip body.
+        use std::io::Write;
+        let mut enc = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+        enc.write_all(b"chunked and gzipped").unwrap();
+        let gz = enc.finish().unwrap();
+        let mut chunk = format!("{:x}\r\n", gz.len()).into_bytes();
+        chunk.extend_from_slice(&gz);
+        chunk.extend_from_slice(b"\r\n0\r\n\r\n");
+
+        let mut raw =
+            b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nTransfer-Encoding: chunked\r\nContent-Encoding: gzip\r\n\r\n".to_vec();
+        raw.extend_from_slice(&chunk);
+
+        assert_eq!(parse_response(&raw).body, "chunked and gzipped");
     }
 
     #[test]

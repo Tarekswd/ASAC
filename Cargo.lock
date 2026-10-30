@@ -203,6 +203,7 @@ dependencies = [
  "anyhow",
  "arti-client",
  "asac-crawler",
+ "flate2",
  "tokio",
  "tokio-rustls",
  "tor-rtcompat",
