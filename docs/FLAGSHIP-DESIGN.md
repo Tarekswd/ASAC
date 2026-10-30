@@ -74,8 +74,22 @@ timing dependence on the term. Each becomes a measurable property in §7.
 
 ## 4. Gap B — scale
 
-PIR is practical mainly over a *small* database today [unverified: exact current practical ceiling; measure,
-don't assume]. Plan:
+**Measured** (our PIANO impl, `cargo run -p asac-pir --example pir_cost --release`, 256-byte records, 2026-10-30):
+
+| n | sqrt(n) | preprocess | per query | response | server indices/query |
+|---|---|---|---|---|---|
+| 64 | 8 | 0.79 ms | 2.7 µs | 256 B | 8 |
+| 256 | 16 | 0.96 ms | 1.6 µs | 256 B | 16 |
+| 1 024 | 32 | 6.1 ms | 2.2 µs | 256 B | 32 |
+| 4 096 | 64 | 47 ms | 6.6 µs | 256 B | 64 |
+| 16 384 | 128 | 484 ms | 16 µs | 256 B | 128 |
+
+Reading: **queries are microseconds** (symmetric-only PIANO), the **response is constant-size** regardless of
+which record (no size side channel), and the server sees exactly **sqrt(n) indices per query, independent of
+the target** (constant query shape). The real cost is **preprocessing**, which scans the whole DB (~linear in
+n) — so a per-crawl re-preprocess is cheap at 10^3 records, ~0.5 s at ~16 k, and is the quantity to watch as
+the corpus grows. This confirms "practical over a small/curated index" with numbers, and says the scaling work
+is about preprocessing + sharding, not query cost. Plan:
 
 - **Top-N first.** Prototype over a curated "most-common-queries" / top-N index (PLAN §4.4 #1), not the full
   crawl. Prove the mechanism and measure cost before scaling.
@@ -125,7 +139,9 @@ Ties into PLAN §6. For each property, an experiment, not an assertion:
 - **Content indistinguishability** — argue by construction (the PIR security argument) *and* test the
   implementation for side channels: response size constant across terms (hit vs miss, popular vs rare), PIR
   round count constant, wall-clock time independent of the term (statistical test over many queries in
-  Shadow).
+  Shadow). *Partly measured already* (§4 table): the PIR response is a constant 256 B and the server sees a
+  constant sqrt(n) indices per query regardless of the target. Still to measure under Shadow: wall-clock
+  timing independence from the term.
 - **Anonymity set** — in Shadow with N clients and a mix topology, measure the observer's uncertainty
   (entropy / set size) about which client issued a given search, as cover rate and mix count vary. Target: a
   documented minimum set size at a stated cover-traffic budget.
