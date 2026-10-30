@@ -147,9 +147,10 @@ Before any "mathematically unable to profile you" claim ships:
 
 Each is a normal, testable step like the ones already shipped; crates in parentheses.
 
-- **F1** Oblivious keyword→bucket lookup over PIANO, fixed buckets, in-process; private posting-list retrieval
-  for a secret term over a small index (`asac-pir`, `asac-search`). Tests: correctness + constant response
-  size across terms.
+- **F1 — done.** Oblivious keyword→bucket lookup over PIANO, fixed buckets, in-process; private posting-list
+  retrieval for a secret term, no public term directory (`asac_search::PrivateKeyword`). Fixed bucket width =
+  constant response size across terms. Tests cover correct posting lists, absent terms, and the posting-list
+  cap. Query budget scales with sqrt(buckets) (PIANO). Remaining for the flagship: F2–F6 below.
 - **F2** Rank + fetch the top result rows privately (compose F1 with the existing record PIR); replace the
   top-1-per-term cache.
 - **F3** Scale work: sharding + width caps + top-N corpus; Shadow cost measurement vs targets (§4, §7).

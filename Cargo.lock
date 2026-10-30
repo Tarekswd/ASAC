@@ -242,6 +242,7 @@ version = "0.0.0"
 dependencies = [
  "asac-index",
  "asac-pir",
+ "blake3",
  "tantivy",
 ]
 
