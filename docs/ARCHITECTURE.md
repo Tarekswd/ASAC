@@ -25,7 +25,8 @@ potarek/
 │   ├── asac-demo/       # bin: live end-to-end (crawl over Tor -> index -> query -> HTML)
 │   ├── asac-server/     # bin: serve ASAC as a v3 onion service (arti launch_onion_service)
 │   ├── asac-rank/       # lib: link-graph authority (PageRank) + BM25xauthority blend, ranking v2 (PLAN 4.3 #4)
-│   └── asac-mix/        # lib: Loopix-style Poisson cover-traffic send scheduler, flagship F4 (PLAN 4.4)
+│   ├── asac-mix/        # lib: Loopix-style Poisson cover-traffic send scheduler, flagship F4 (PLAN 4.4)
+│   └── asac-client/     # lib: client query stream - real searches interleaved with decoys, Poisson-paced (4.3 #7 + F4)
 └── docs/
 ```
 
@@ -36,7 +37,8 @@ potarek/
 | `potato` | bin | Bootstrap a Tor client via `arti-client`; smoke-test connectivity. SOCKS proxy is Arti's `arti proxy` for now. | 3, 5 (Phase 0/1) | skeleton |
 | `potato-policy` | lib | `Mode` enum (Swift/Balanced/Fortress) and the rules each mode implies. | 2.2 | real, tested |
 | `potato-bench` | bin | SOCKS5 benchmark: connect/TTFB/total/throughput through any proxy. | 6 | real, tested + live |
-| `asac-decoy` | lib | Generate benign decoy queries from a caller-supplied vetted term list. | 4.3 | real, tested |
+| `asac-decoy` | lib | Generate benign decoy queries from a caller-supplied vetted term list. Consumed by asac-client. | 4.3 #7 | real, tested |
+| `asac-client` | lib | Client query stream: real searches interleaved with asac-decoy decoys, paced by the asac-mix Poisson scheduler, so an observer can't pick real queries by timing (F4) or content (decoys). | 4.3 #7 / 4.4 | real, tested |
 | `asac-pir` | lib | PIR so the server can't learn the query. First scheme: trivial PIR (server sends whole small index). | 4.4 | real, tested |
 | `asac-safety` | lib | Pre-index content-safety filter: host blocklist (abuse-report takedowns) + exact-hash + keyword blocklists + required partner hash-match seam; fails closed by construction. | 4.3 #2 | real, tested |
 | `asac-index` | lib | BM25 full-text index (Tantivy); inserts gated by asac-safety; stores title/url/body/links. In-RAM (`new`) or persistent on disk (`open_or_create`); inserts upsert by URL so re-crawls refresh. | 4.3 #3 | real, tested |

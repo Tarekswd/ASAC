@@ -163,6 +163,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "asac-client"
+version = "0.0.0"
+dependencies = [
+ "asac-decoy",
+ "asac-mix",
+]
+
+[[package]]
 name = "asac-crawler"
 version = "0.0.0"
 dependencies = [

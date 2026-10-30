@@ -1,0 +1,13 @@
+[package]
+name = "asac-client"
+version = "0.0.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish = false
+description = "Client-side query stream: real searches interleaved with vetted decoys, Poisson-paced (PLAN 4.3 #7 + flagship F4), so an observer can't pick real queries by timing or content."
+
+[dependencies]
+asac-mix = { path = "../asac-mix" }
+asac-decoy = { path = "../asac-decoy" }
