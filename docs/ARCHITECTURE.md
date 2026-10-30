@@ -50,7 +50,7 @@ potarek/
 | `asac-rank` | lib | Ranking v2: link-graph authority (PageRank over crawled links), a BM25xauthority blend, and a freshness decay (half-life toward a floor). asac-site ranks by BM25 x authority x freshness. | 4.3 #4 | real, tested |
 | `asac-mix` | lib | Loopix-style rate-λ Poisson send scheduler with cover traffic; the send schedule is independent of real traffic (timing-unlinkable). Flagship F4 metadata layer; live mix transport pending. | 4.4 | real, tested (scheduler core) |
 | `asac-demo` | bin | Live end-to-end: crawl a seed over Tor, index it (safety-gated), answer one query as an HTML page. | 4 | real; manual (needs live Tor) |
-| `asac-server` | bin | Serve ASAC as a v3 onion service: crawl seeds, persist+upsert into an on-disk index, then answer each request with a rendered HTML page over the onion stream (`arti` `launch_onion_service`). http on the onion; one task per request; graceful Ctrl-C shutdown; Equi-X PoW via the opt-in `pow` feature (LGPL `equix`). | 4.3 #5 | real; request parse/response + config tested, live serving manual |
+| `asac-server` | bin | Serve ASAC as a v3 onion service: crawl seeds, persist+upsert into an on-disk index, then answer each request with a rendered HTML page over the onion stream (`arti` `launch_onion_service`). http on the onion; one task per request; graceful Ctrl-C shutdown; optional background re-crawl (`ASAC_RECRAWL_SECS`); Equi-X PoW via the opt-in `pow` feature (LGPL `equix`). | 4.3 #5 | real; request parse/response + config + interval tested, live serving manual |
 
 ## Crates planned (not yet created)
 

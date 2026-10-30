@@ -16,6 +16,9 @@
 //! Usage: `cargo run -p asac-server -- <nickname> <seed-http-url> [more seeds...]`
 
 use std::process::exit;
+use std::sync::Arc;
+use std::thread;
+use std::time::Duration;
 
 use anyhow::{anyhow, Result};
 use arti_client::{TorClient, TorClientConfig};
@@ -70,14 +73,72 @@ fn main() -> Result<()> {
 
     // Link-graph authority over the crawl, for ranking v2.
     let pages: Vec<(String, Vec<String>)> = docs.iter().map(|d| (d.url.clone(), d.links.clone())).collect();
-    let authority = Authority::from_pages(&pages);
+    let authority = Arc::new(Authority::from_pages(&pages));
+
+    // A read handle for serving; cloned before the index (writer) moves to the re-crawl thread (if any).
+    let reader = Arc::new(index.reader());
+
+    // Optional scheduled re-crawl (ASAC_RECRAWL_SECS=N): refreshes the index in the background while serving;
+    // tantivy readers see each commit. Without it, the index is the one-shot startup crawl.
+    match recrawl_interval(std::env::var("ASAC_RECRAWL_SECS").ok().as_deref()) {
+        Some(interval) => {
+            eprintln!("scheduled re-crawl every {}s", interval.as_secs());
+            spawn_recrawl(index, args[2..].to_vec(), interval);
+        }
+        None => drop(index),
+    }
 
     // Phase 2 (async): serve as an onion service.
     let rt = tokio::runtime::Runtime::new()?;
-    rt.block_on(serve(index, authority, &nickname))
+    rt.block_on(serve(reader, authority, &nickname))
 }
 
-async fn serve(index: AsacIndex, authority: Authority, nickname: &str) -> Result<()> {
+/// Parse `ASAC_RECRAWL_SECS` into a re-crawl interval; `None` means crawl once (no re-crawl).
+fn recrawl_interval(raw: Option<&str>) -> Option<Duration> {
+    match raw.and_then(|s| s.trim().parse::<u64>().ok()) {
+        Some(secs) if secs > 0 => Some(Duration::from_secs(secs)),
+        _ => None,
+    }
+}
+
+/// Re-crawl `seeds` every `interval` on a dedicated thread, upserting into `index`; serving readers (which
+/// share the underlying index) pick up each commit. Runs the sync `TorFetcher` off the async runtime.
+///
+/// shortcut: refreshes the index (and freshness timestamps) only; link authority is not recomputed until the
+/// process restarts. Recompute authority into a swappable shared handle when that matters.
+fn spawn_recrawl(mut index: AsacIndex, seeds: Vec<String>, interval: Duration) {
+    thread::spawn(move || {
+        let fetcher = match TorFetcher::bootstrap(USER_AGENT) {
+            Ok(f) => f,
+            Err(e) => {
+                eprintln!("re-crawl disabled: Tor bootstrap failed: {e}");
+                return;
+            }
+        };
+        let filter = ContentFilter::new(NoKnownIllegal);
+        let cfg = CrawlConfig { max_pages: 50, ..CrawlConfig::default() };
+        loop {
+            thread::sleep(interval);
+            let seed_refs: Vec<&str> = seeds.iter().map(String::as_str).collect();
+            let docs = crawl(&fetcher, &seed_refs, &cfg);
+            for d in &docs {
+                if let Err(e) = index.add(&filter, &d.title, &d.url, &d.text, &d.links.join("\n")) {
+                    eprintln!("re-crawl index error: {e}");
+                }
+            }
+            if let Err(e) = index.commit() {
+                eprintln!("re-crawl commit error: {e}");
+            }
+            eprintln!("re-crawled {} page(s)", docs.len());
+        }
+    });
+}
+
+async fn serve(
+    reader: Arc<AsacReader>,
+    authority: Arc<Authority>,
+    nickname: &str,
+) -> Result<()> {
     eprintln!("bootstrapping Tor to serve...");
     let client = TorClient::create_bootstrapped(TorClientConfig::default()).await?;
 
@@ -98,10 +159,6 @@ async fn serve(index: AsacIndex, authority: Authority, nickname: &str) -> Result
         ),
         None => eprintln!("serving (onion address not yet available)"),
     }
-
-    // Cheap, shareable handles; each request task gets its own clones.
-    let reader = std::sync::Arc::new(index.reader());
-    let authority = std::sync::Arc::new(authority);
 
     // handle_rend_requests accepts rendezvous requests and yields per-client stream requests. Serve each on
     // its own task so slow clients don't block others, and stop cleanly on Ctrl-C.
@@ -204,6 +261,15 @@ mod tests {
         assert!(resp.starts_with("HTTP/1.1 200 OK\r\n"));
         assert!(resp.contains(&format!("Content-Length: {}\r\n", body.len())));
         assert!(resp.ends_with(body));
+    }
+
+    #[test]
+    fn recrawl_interval_parsing() {
+        assert_eq!(recrawl_interval(Some("3600")), Some(Duration::from_secs(3600)));
+        assert_eq!(recrawl_interval(Some("  60 ")), Some(Duration::from_secs(60)));
+        assert_eq!(recrawl_interval(Some("0")), None); // 0 disables
+        assert_eq!(recrawl_interval(Some("nope")), None);
+        assert_eq!(recrawl_interval(None), None);
     }
 
     #[test]
