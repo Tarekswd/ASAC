@@ -12,3 +12,4 @@ description = "Search glue: turns a request (or raw query) into an HTML results 
 tantivy = "=0.27.0"
 asac-index = { path = "../asac-index" }
 asac-frontend = { path = "../asac-frontend" }
+asac-rank = { path = "../asac-rank" }

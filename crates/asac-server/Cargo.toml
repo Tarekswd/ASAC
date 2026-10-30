@@ -19,6 +19,7 @@ asac-crawler = { path = "../asac-crawler" }
 asac-fetch = { path = "../asac-fetch" }
 asac-index = { path = "../asac-index" }
 asac-site = { path = "../asac-site" }
+asac-rank = { path = "../asac-rank" }
 # onion-service-service enables TorClient::launch_onion_service (off by default); rest mirrors potato/asac-fetch.
 arti-client = { version = "=0.47.0", default-features = false, features = ["tokio", "rustls", "compression", "static-sqlite", "onion-service-service"] }
 tor-hsservice = "=0.47.0"

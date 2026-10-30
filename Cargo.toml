@@ -16,6 +16,7 @@ members = [
     "crates/asac-fetch",
     "crates/asac-demo",
     "crates/asac-server",
+    "crates/asac-rank",
 ]
 
 [workspace.package]

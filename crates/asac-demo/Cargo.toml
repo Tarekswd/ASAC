@@ -13,4 +13,5 @@ asac-crawler = { path = "../asac-crawler" }
 asac-fetch = { path = "../asac-fetch" }
 asac-index = { path = "../asac-index" }
 asac-site = { path = "../asac-site" }
+asac-rank = { path = "../asac-rank" }
 anyhow = "1"

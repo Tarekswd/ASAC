@@ -23,7 +23,8 @@ potarek/
 │   ├── asac-fetch/      # lib: live Fetcher backend - HTTP over Tor via arti-client (PLAN 4.3 #1)
 │   ├── asac-site/       # lib: search glue - request/query -> index -> rendered HTML page
 │   ├── asac-demo/       # bin: live end-to-end (crawl over Tor -> index -> query -> HTML)
-│   └── asac-server/     # bin: serve ASAC as a v3 onion service (arti launch_onion_service)
+│   ├── asac-server/     # bin: serve ASAC as a v3 onion service (arti launch_onion_service)
+│   └── asac-rank/       # lib: link-graph authority (PageRank) + BM25xauthority blend, ranking v2 (PLAN 4.3 #4)
 └── docs/
 ```
 
@@ -42,7 +43,8 @@ potarek/
 | `asac-crawler` | lib | Polite, robots-respecting crawl core: fetch behind a `Fetcher` trait (onion = arti-client, clear-web = Scrapling over Tor), extract title/text/links (HTML only, no JS), scope + frontier, output feeds asac-index. | 4.3 #1 | real, tested (core; Scrapling clear-web backend pending) |
 | `asac-frontend` | lib | Renders the results page as one self-contained HTML document (no JS, no third-party resources, no cookies); escapes all untrusted query/result data and only links http(s) URLs. | 4.3 #5 | real, tested (served live by asac-server; Equi-X PoW via its opt-in `pow` feature) |
 | `asac-fetch` | lib | Live `Fetcher` backend for asac-crawler: HTTP(S) over Tor via `arti-client` (onion + clear-web), bridging the sync trait to arti's async client. https uses rustls/ring + Mozilla roots over the Tor stream; follows up to 5 redirects; de-chunks and reads UTF-8 bodies (no gzip). | 4.3 #1 | real; response parsing + redirects tested, live http+https verified |
-| `asac-site` | lib | Search glue: request target (or raw query) -> `asac-index` -> `asac-frontend` HTML page. The function a live front end calls per request. | 4.3 #5/#6 | real, tested |
+| `asac-site` | lib | Search glue: request target/query -> top BM25 candidates from `asac-index` -> re-ranked by `asac-rank` authority -> `asac-frontend` HTML page. The function a live front end calls per request. | 4.3 #5/#6 | real, tested |
+| `asac-rank` | lib | Link-graph authority (PageRank over crawled links) + a BM25xauthority blend; ranking v2. Freshness (the other v2 half) pending. | 4.3 #4 | real, tested |
 | `asac-demo` | bin | Live end-to-end: crawl a seed over Tor, index it (safety-gated), answer one query as an HTML page. | 4 | real; manual (needs live Tor) |
 | `asac-server` | bin | Serve ASAC as a v3 onion service: crawl seeds, persist+upsert into an on-disk index, then answer each request with a rendered HTML page over the onion stream (`arti` `launch_onion_service`). http on the onion; one task per request; graceful Ctrl-C shutdown; Equi-X PoW via the opt-in `pow` feature (LGPL `equix`). | 4.3 #5 | real; request parse/response + config tested, live serving manual |
 

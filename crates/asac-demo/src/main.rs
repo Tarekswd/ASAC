@@ -44,7 +44,11 @@ fn main() -> anyhow::Result<()> {
     }
     index.commit()?;
 
+    // Link-graph authority over what we crawled, for ranking v2.
+    let pages: Vec<(String, Vec<String>)> = docs.iter().map(|d| (d.url.clone(), d.links.clone())).collect();
+    let authority = asac_rank::Authority::from_pages(&pages);
+
     eprintln!("answering query {query:?}...");
-    print!("{}", search_page(&index.reader(), query, 10)?);
+    print!("{}", search_page(&index.reader(), query, 10, &authority)?);
     Ok(())
 }

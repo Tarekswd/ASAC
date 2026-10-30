@@ -1,0 +1,11 @@
+[package]
+name = "asac-rank"
+version = "0.0.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish = false
+description = "Link-graph authority (PageRank) over crawled pages, and a BM25xauthority blend for ranking v2 (PLAN 4.3 #4)."
+
+[dependencies]
