@@ -71,6 +71,58 @@ impl PoissonScheduler {
     }
 }
 
+/// Measure the anonymity the scheduler provides against a **timing-only** observer (FLAGSHIP-DESIGN.md F5, at
+/// the scheduler level). Simulates `n_clients`, exactly one of which is actually searching (`real_messages`
+/// queued), each running its own rate-`rate` scheduler for `ticks` ticks. The observer sees only each client's
+/// send *timing* (content is hidden by PIR/encryption) and guesses the searcher by the simplest timing
+/// statistic (total delay). Returns the observer's success rate over `trials`.
+///
+/// Because the send schedule is independent of whether a client is searching, the observer has no signal and
+/// its success approaches `1/n_clients` (chance) — i.e. the anonymity set is the full population. This is the
+/// scheduler-level result; full network anonymity (routing through mixes) needs a Shadow network simulation.
+pub fn timing_observer_accuracy(
+    n_clients: usize,
+    real_messages: usize,
+    ticks: usize,
+    trials: usize,
+    rate: f64,
+    base_seed: u64,
+) -> f64 {
+    assert!(n_clients >= 2 && ticks >= 1 && trials >= 1);
+    let mut correct = 0usize;
+    for t in 0..trials {
+        let real = (t.wrapping_mul(2_654_435_761)) % n_clients; // which client searches this trial
+        let mut totals = vec![0.0f64; n_clients];
+        for (c, total) in totals.iter_mut().enumerate() {
+            let seed = base_seed
+                ^ (t as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15)
+                ^ (c as u64).wrapping_mul(0xD1B5_4A32_D192_ED03);
+            let mut sch = PoissonScheduler::new(rate, seed);
+            if c == real {
+                for _ in 0..real_messages {
+                    sch.enqueue(vec![0u8; 8]);
+                }
+            }
+            // Observer records timing only; the Real/Cover distinction is hidden from it.
+            for _ in 0..ticks {
+                let (delay, _payload) = sch.next_send();
+                *total += delay;
+            }
+        }
+        // Observer's best timing-based guess: the client with the largest total delay.
+        let guess = totals
+            .iter()
+            .enumerate()
+            .max_by(|a, b| a.1.partial_cmp(b.1).unwrap_or(std::cmp::Ordering::Equal))
+            .map(|(i, _)| i)
+            .unwrap();
+        if guess == real {
+            correct += 1;
+        }
+    }
+    correct as f64 / trials as f64
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -112,5 +164,15 @@ mod tests {
         for _ in 0..1000 {
             assert!(s.next_delay() > 0.0);
         }
+    }
+
+    #[test]
+    fn timing_observer_is_at_chance() {
+        // With 10 clients, a timing-only observer should identify the searcher ~10% of the time — no better
+        // than guessing, because the send schedule does not depend on real traffic. Anonymity set = N.
+        let n = 10;
+        let acc = timing_observer_accuracy(n, 3, 200, 4000, 2.0, 0xA5AC);
+        let chance = 1.0 / n as f64;
+        assert!((acc - chance).abs() < 0.03, "observer accuracy {acc} should be ~{chance} (chance)");
     }
 }

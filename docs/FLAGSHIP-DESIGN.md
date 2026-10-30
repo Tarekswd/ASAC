@@ -144,7 +144,11 @@ Ties into PLAN §6. For each property, an experiment, not an assertion:
   timing independence from the term.
 - **Anonymity set** — in Shadow with N clients and a mix topology, measure the observer's uncertainty
   (entropy / set size) about which client issued a given search, as cover rate and mix count vary. Target: a
-  documented minimum set size at a stated cover-traffic budget.
+  documented minimum set size at a stated cover-traffic budget. *Scheduler level measured already*
+  (`asac_mix::timing_observer_accuracy`, test `timing_observer_is_at_chance`): a timing-only observer over 10
+  clients identifies the searcher at ~1/10 (chance), i.e. the anonymity set is the full population — because
+  the send schedule is independent of real traffic. Still to measure under Shadow: the *network-level* set,
+  with routing through real mixes and a global observer of the links.
 - **Cost** — added latency (p50/p90) and bandwidth per query vs the no-mix baseline, so the privacy/cost curve
   is explicit.
 
@@ -177,7 +181,10 @@ Each is a normal, testable step like the ones already shipped; crates in parenth
   queue; the delay schedule is independent of the queue (real vs cover is invisible to a timing observer),
   tested. Remaining: the mix/provider wire protocol and live transport (Sphinx packets, routed loop messages,
   provider storage) — and the own-mixes-vs-Nym decision (§10).
-- **F5** Shadow anonymity-set harness and the content side-channel tests (§7).
+- **F5 — scheduler level done; network level pending.** Content side channels partly measured (§4 table:
+  constant response size + server index count). Scheduler-level anonymity measured
+  (`asac_mix::timing_observer_accuracy`): timing-only observer at chance = 1/N. Still to do in Shadow:
+  network-level anonymity set with routing through real mixes, and wall-clock timing independence.
 - **F6** Security write-up + external review + artifact (§8).
 
 F1–F3 are solo-buildable here. F4–F5 are larger. F6 needs outside people.
