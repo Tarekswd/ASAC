@@ -14,9 +14,10 @@
 //! directory** — the client hashes a secret term to a bucket and PIR-fetches it, so the server learns neither
 //! the bucket nor the term, and every response is the same fixed size.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use asac_index::{AsacIndex, AsacReader};
+use asac_rank::{blend, Authority};
 use asac_pir::single_server::{
     logical_query, preprocess_streaming, ClientState, Params, Permutation, Server, SingleServerDb,
 };
@@ -209,6 +210,9 @@ impl PrivateKeyword {
 // fixed-width records (truncated/padded). Ranking of the posting list, scale (sharding), and the formal
 // argument are F2-rank/F3/F6 in FLAGSHIP-DESIGN.md.
 
+/// One hit while building a corpus: (doc id, url, BM25 score).
+type ScoredHit = (u32, String, f32);
+
 /// A private corpus: term -> posting list -> document records, all retrieved via PIR.
 pub struct PrivateCorpus {
     keywords: PrivateKeyword,
@@ -260,9 +264,10 @@ impl PrivateCorpus {
         Self { keywords, doc_perm, doc_db, doc_hints, n_docs: n }
     }
 
-    /// Build a private corpus from a real index over a public `vocab`: each term's top `per_term` BM25 hits
-    /// become its (relevance-ordered) posting list, and the union of those hits becomes the document set. This
-    /// is the curated top-N corpus of FLAGSHIP-DESIGN.md / PLAN 4.4 #1, with real records and real postings.
+    /// Build a private corpus from a real index over a public `vocab`: each term's top `per_term` hits become
+    /// its posting list, **ordered by BM25 blended with link authority** (so the private path returns
+    /// best-first, like the public one), and the union of those hits becomes the document set. This is the
+    /// curated top-N corpus of FLAGSHIP-DESIGN.md / PLAN 4.4 #1, with real records and real postings.
     pub fn from_index(
         index: &AsacReader,
         vocab: &[&str],
@@ -270,12 +275,17 @@ impl PrivateCorpus {
         doc_width: usize,
         seed: u64,
     ) -> tantivy::Result<Self> {
+        const AUTHORITY_WEIGHT: f32 = 0.5; // matches asac-site's public-path blend
+
         let mut url_to_id: HashMap<String, u32> = HashMap::new();
         let mut doc_records: Vec<Vec<u8>> = Vec::new();
-        let mut keyword_entries: Vec<(String, Vec<u32>)> = Vec::new();
+        let mut pages: Vec<(String, Vec<String>)> = Vec::new();
+        let mut seen_page: HashSet<String> = HashSet::new();
+        // Per term: its scored hits, ordered by authority-blend after we know the link graph.
+        let mut per_term_hits: Vec<(String, Vec<ScoredHit>)> = Vec::new();
 
         for &term in vocab {
-            let mut ids = Vec::new();
+            let mut hits = Vec::new();
             for h in index.search_docs(term, per_term)? {
                 let id = match url_to_id.get(&h.url) {
                     Some(&id) => id,
@@ -286,10 +296,28 @@ impl PrivateCorpus {
                         id
                     }
                 };
-                ids.push(id);
+                if seen_page.insert(h.url.clone()) {
+                    let links = h.links.split('\n').filter(|s| !s.is_empty()).map(str::to_string).collect();
+                    pages.push((h.url.clone(), links));
+                }
+                hits.push((id, h.url.clone(), h.score));
             }
-            keyword_entries.push((term.to_string(), ids));
+            per_term_hits.push((term.to_string(), hits));
         }
+
+        let authority = Authority::from_pages(&pages);
+        let keyword_entries: Vec<(String, Vec<u32>)> = per_term_hits
+            .into_iter()
+            .map(|(term, mut hits)| {
+                hits.sort_by(|a, b| {
+                    let sb = blend(b.2, authority.norm(&b.1), AUTHORITY_WEIGHT);
+                    let sa = blend(a.2, authority.norm(&a.1), AUTHORITY_WEIGHT);
+                    sb.partial_cmp(&sa).unwrap_or(std::cmp::Ordering::Equal)
+                });
+                (term, hits.into_iter().map(|(id, _, _)| id).collect())
+            })
+            .collect();
+
         Ok(Self::build(&doc_records, &keyword_entries, doc_width, seed))
     }
 

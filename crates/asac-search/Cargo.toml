@@ -11,5 +11,6 @@ description = "Private search: BM25 index (asac-index) results served via PIR (a
 [dependencies]
 asac-index = { path = "../asac-index" }
 asac-pir = { path = "../asac-pir" }
+asac-rank = { path = "../asac-rank" }
 tantivy = "=0.27.0"
 blake3 = "1"

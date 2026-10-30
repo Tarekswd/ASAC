@@ -170,8 +170,8 @@ Each is a normal, testable step like the ones already shipped; crates in parenth
 - **F2 — done.** Compose F1 with a second PIANO instance keyed by doc id (`asac_search::PrivateCorpus`): a
   secret term privately fetches its posting list, then privately fetches each document record — the server
   learns neither the term nor which docs. `PrivateCorpus::from_index` builds the corpus + postings from a real
-  `AsacIndex` over a public vocab (postings in BM25 order; the curated top-N corpus of PLAN 4.4 #1). Remaining
-  refinement: fold authority into the ordering *inside* the private path.
+  `AsacIndex` over a public vocab, postings ordered by **BM25 blended with link authority** (`asac-rank`), so
+  the private path returns best-first like the public one — the curated top-N corpus of PLAN 4.4 #1.
 - **F3** Scale work: sharding + width caps + top-N corpus; Shadow cost measurement vs targets (§4, §7).
 - **F4 — scheduler done.** `asac_mix::PoissonScheduler`: rate-λ Poisson send schedule with a real-message
   queue; the delay schedule is independent of the queue (real vs cover is invisible to a timing observer),
