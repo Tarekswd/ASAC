@@ -94,6 +94,18 @@ pub fn blend(bm25: f32, authority_norm: f32, weight: f32) -> f32 {
     bm25 * (1.0 + weight * authority_norm)
 }
 
+/// A freshness multiplier in `[floor, 1]`: `1.0` for a just-fetched page, halving every `half_life_secs`
+/// toward `floor` as it ages. The floor keeps an old-but-authoritative page demoted, not erased (ranking v2's
+/// freshness half, PLAN 4.3 #4). `floor` is clamped to `[0, 1]`.
+pub fn freshness_factor(age_secs: u64, half_life_secs: u64, floor: f32) -> f32 {
+    if half_life_secs == 0 {
+        return 1.0;
+    }
+    let floor = floor.clamp(0.0, 1.0);
+    let decay = 0.5f32.powf(age_secs as f32 / half_life_secs as f32); // (0, 1]
+    floor + (1.0 - floor) * decay
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -127,6 +139,16 @@ mod tests {
         let a = Authority::empty();
         assert_eq!(a.norm("anything"), 0.0);
         assert_eq!(blend(2.0, a.norm("anything"), 0.5), 2.0);
+    }
+
+    #[test]
+    fn freshness_decays_from_one_toward_floor() {
+        let hl = 86_400; // 1 day
+        assert!((freshness_factor(0, hl, 0.2) - 1.0).abs() < 1e-6, "just-fetched = 1.0");
+        assert!((freshness_factor(hl, hl, 0.2) - (0.2 + 0.8 * 0.5)).abs() < 1e-6, "one half-life");
+        assert!(freshness_factor(100 * hl, hl, 0.2) < 0.21, "very old approaches the floor");
+        assert!(freshness_factor(hl, hl, 0.2) > freshness_factor(3 * hl, hl, 0.2), "fresher ranks higher");
+        assert_eq!(freshness_factor(999, 0, 0.2), 1.0, "half_life 0 disables decay");
     }
 
     #[test]

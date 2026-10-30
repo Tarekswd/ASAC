@@ -29,6 +29,8 @@ pub struct DocHit {
     pub url: String,
     pub body: String,
     pub links: String,
+    /// When the document was indexed, Unix seconds (for freshness ranking).
+    pub fetched_at: u64,
 }
 
 /// Pull the first string value of a stored field out of Tantivy's `to_json` output, which represents each
@@ -41,6 +43,23 @@ fn first_str(v: &serde_json::Value, key: &str) -> String {
     }
 }
 
+/// Pull the first u64 value of a stored numeric field out of Tantivy's `to_json` output.
+fn first_u64(v: &serde_json::Value, key: &str) -> u64 {
+    match v.get(key) {
+        Some(serde_json::Value::Array(a)) => a.first().and_then(serde_json::Value::as_u64).unwrap_or(0),
+        Some(x) => x.as_u64().unwrap_or(0),
+        None => 0,
+    }
+}
+
+/// Current time in Unix seconds (0 if the clock is before the epoch, which should not happen).
+fn now_secs() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
 /// A BM25 full-text index. Inserts are gated by a content-safety filter; search ranks by BM25 over title+body.
 pub struct AsacIndex {
     index: Index,
@@ -50,43 +69,49 @@ pub struct AsacIndex {
     url: Field,
     body: Field,
     links: Field,
+    fetched_at: Field,
 }
+
+/// The ASAC schema fields (title, url, body, links, fetched_at).
+type Fields = (Field, Field, Field, Field, Field);
 
 impl AsacIndex {
     /// The ASAC schema and its fields (shared by the in-RAM and on-disk constructors).
-    fn schema_fields() -> (Schema, Field, Field, Field, Field) {
+    fn schema_fields() -> (Schema, Fields) {
         let mut b = Schema::builder();
         let title = b.add_text_field("title", TEXT | STORED);
         let url = b.add_text_field("url", STRING | STORED); // URLs stored verbatim, not tokenized (one term)
         let body = b.add_text_field("body", TEXT | STORED);
         let links = b.add_text_field("links", STORED);
-        (b.build(), title, url, body, links)
+        let fetched_at = b.add_u64_field("fetched_at", STORED);
+        (b.build(), (title, url, body, links, fetched_at))
     }
 
-    fn from_index(index: Index, schema: Schema, fields: (Field, Field, Field, Field)) -> tantivy::Result<Self> {
+    fn from_index(index: Index, schema: Schema, fields: Fields) -> tantivy::Result<Self> {
         let writer = index.writer(50_000_000)?;
-        let (title, url, body, links) = fields;
-        Ok(Self { index, schema, writer, title, url, body, links })
+        let (title, url, body, links, fetched_at) = fields;
+        Ok(Self { index, schema, writer, title, url, body, links, fetched_at })
     }
 
     /// Create an in-memory index with the ASAC schema.
     pub fn new() -> tantivy::Result<Self> {
-        let (schema, title, url, body, links) = Self::schema_fields();
+        let (schema, fields) = Self::schema_fields();
         let index = Index::create_in_ram(schema.clone());
-        Self::from_index(index, schema, (title, url, body, links))
+        Self::from_index(index, schema, fields)
     }
 
     /// Open a persistent on-disk index at `dir`, creating it (and the directory) if absent. Reopening the same
     /// directory keeps everything indexed on the previous run.
     pub fn open_or_create(dir: &Path) -> tantivy::Result<Self> {
         std::fs::create_dir_all(dir)?;
-        let (schema, title, url, body, links) = Self::schema_fields();
+        let (schema, fields) = Self::schema_fields();
         let index = Index::open_or_create(MmapDirectory::open(dir)?, schema.clone())?;
-        Self::from_index(index, schema, (title, url, body, links))
+        Self::from_index(index, schema, fields)
     }
 
-    /// Run the safety filter, then index the document only if it is allowed. Returns the filter's [`Verdict`];
-    /// a `Block` means nothing was indexed. Call [`AsacIndex::commit`] to make inserts searchable.
+    /// Run the safety filter, then index the document only if it is allowed, stamped with the current time.
+    /// Returns the filter's [`Verdict`]; a `Block` means nothing was indexed. Call [`AsacIndex::commit`] to
+    /// make inserts searchable.
     pub fn add<B: HashMatchBackend>(
         &mut self,
         filter: &ContentFilter<B>,
@@ -94,6 +119,19 @@ impl AsacIndex {
         url: &str,
         body: &str,
         links: &str,
+    ) -> tantivy::Result<Verdict> {
+        self.add_at(filter, title, url, body, links, now_secs())
+    }
+
+    /// Like [`AsacIndex::add`] but with an explicit `fetched_at` (Unix seconds) for the freshness signal.
+    pub fn add_at<B: HashMatchBackend>(
+        &mut self,
+        filter: &ContentFilter<B>,
+        title: &str,
+        url: &str,
+        body: &str,
+        links: &str,
+        fetched_at: u64,
     ) -> tantivy::Result<Verdict> {
         // Gate on the URL (host takedowns), the body bytes, and the human-visible text (title + body).
         let verdict = filter.check(url, body.as_bytes(), &format!("{title} {body}"));
@@ -107,6 +145,7 @@ impl AsacIndex {
             self.url => url,
             self.body => body,
             self.links => links,
+            self.fetched_at => fetched_at,
         ))?;
         Ok(verdict)
     }
@@ -183,6 +222,7 @@ impl AsacReader {
                     url: first_str(&v, "url"),
                     body: first_str(&v, "body"),
                     links: first_str(&v, "links"),
+                    fetched_at: first_u64(&v, "fetched_at"),
                 }
             })
             .collect())
@@ -263,6 +303,17 @@ mod tests {
         let hits = idx.search_docs("alpha", 10).unwrap();
         assert_eq!(hits.len(), 1, "same URL must not produce a duplicate");
         assert_eq!(hits[0].title, "New Title", "latest crawl wins");
+    }
+
+    #[test]
+    fn add_at_stores_fetched_at_for_freshness() {
+        let mut idx = AsacIndex::new().unwrap();
+        let f = ContentFilter::new(NoKnownIllegal);
+        idx.add_at(&f, "Dated", "http://x/dated", "freshness keyword body", "", 1_700_000_000).unwrap();
+        idx.commit().unwrap();
+        let hits = idx.search_docs("freshness", 5).unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].fetched_at, 1_700_000_000);
     }
 
     #[test]

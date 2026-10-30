@@ -6,7 +6,7 @@
 
 use asac_frontend::{query_from_target, render_home, render_results, ResultItem};
 use asac_index::AsacReader;
-use asac_rank::{blend, Authority};
+use asac_rank::{blend, freshness_factor, Authority};
 
 /// Max characters of body text shown as a result snippet.
 const SNIPPET_CHARS: usize = 200;
@@ -16,6 +16,20 @@ const CANDIDATES: usize = 50;
 
 /// How much a maximally-linked page's score is boosted by authority (see [`asac_rank::blend`]).
 const AUTHORITY_WEIGHT: f32 = 0.5;
+
+/// Freshness half-life: a page's freshness boost halves every ~30 days.
+const FRESHNESS_HALF_LIFE_SECS: u64 = 30 * 24 * 3600;
+
+/// Floor for the freshness multiplier: an ancient page keeps 60% of its score (demoted, not erased).
+const FRESHNESS_FLOOR: f32 = 0.6;
+
+/// Current time in Unix seconds (0 if before the epoch).
+fn now_secs() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
 
 /// Char-safe truncation with an ellipsis (never splits a UTF-8 code point).
 fn snippet(body: &str) -> String {
@@ -37,12 +51,14 @@ pub fn search_page(
     authority: &Authority,
 ) -> tantivy::Result<String> {
     let mut hits = index.search_docs(query, CANDIDATES.max(limit))?;
-    // Blend BM25 with authority, highest first. (NaN-safe: unknown ordering keeps items in place.)
-    hits.sort_by(|a, b| {
-        let sb = blend(b.score, authority.norm(&b.url), AUTHORITY_WEIGHT);
-        let sa = blend(a.score, authority.norm(&a.url), AUTHORITY_WEIGHT);
-        sb.partial_cmp(&sa).unwrap_or(std::cmp::Ordering::Equal)
-    });
+    let now = now_secs();
+    // Score = BM25 x authority boost x freshness decay; highest first. (NaN-safe: equal keeps order.)
+    let rank = |h: &asac_index::DocHit| {
+        let age = now.saturating_sub(h.fetched_at);
+        blend(h.score, authority.norm(&h.url), AUTHORITY_WEIGHT)
+            * freshness_factor(age, FRESHNESS_HALF_LIFE_SECS, FRESHNESS_FLOOR)
+    };
+    hits.sort_by(|a, b| rank(b).partial_cmp(&rank(a)).unwrap_or(std::cmp::Ordering::Equal));
     hits.truncate(limit);
 
     let items: Vec<ResultItem> = hits
@@ -112,6 +128,23 @@ mod tests {
         let idx = index();
         let html = search_page(&idx.reader(), "zzzznotacorpusword", 10, &Authority::empty()).unwrap();
         assert!(html.contains("No results"));
+    }
+
+    #[test]
+    fn fresher_doc_wins_when_relevance_and_authority_tie() {
+        let mut idx = AsacIndex::new().unwrap();
+        let f = ContentFilter::new(NoKnownIllegal);
+        let now = now_secs();
+        let old = now.saturating_sub(365 * 24 * 3600); // a year old
+        // Same body (equal BM25), no links (equal authority); only recency differs.
+        idx.add_at(&f, "Old", "http://old.example/", "widgets gadgets", "", old).unwrap();
+        idx.add_at(&f, "New", "http://new.example/", "widgets gadgets", "", now).unwrap();
+        idx.commit().unwrap();
+
+        let html = search_page(&idx.reader(), "widgets gadgets", 10, &Authority::empty()).unwrap();
+        let pos_new = html.find("http://new.example/").unwrap();
+        let pos_old = html.find("http://old.example/").unwrap();
+        assert!(pos_new < pos_old, "the fresher doc should rank first on a relevance/authority tie");
     }
 
     #[test]
