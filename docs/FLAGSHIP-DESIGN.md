@@ -157,8 +157,10 @@ Each is a normal, testable step like the ones already shipped; crates in parenth
   `AsacIndex` over a public vocab (postings in BM25 order; the curated top-N corpus of PLAN 4.4 #1). Remaining
   refinement: fold authority into the ordering *inside* the private path.
 - **F3** Scale work: sharding + width caps + top-N corpus; Shadow cost measurement vs targets (§4, §7).
-- **F4** `asac-mix`: client cover-traffic + Poisson-delay scheduler + mix/provider interface skeleton
-  (offline-testable scheduler; live transport later).
+- **F4 — scheduler done.** `asac_mix::PoissonScheduler`: rate-λ Poisson send schedule with a real-message
+  queue; the delay schedule is independent of the queue (real vs cover is invisible to a timing observer),
+  tested. Remaining: the mix/provider wire protocol and live transport (Sphinx packets, routed loop messages,
+  provider storage) — and the own-mixes-vs-Nym decision (§10).
 - **F5** Shadow anonymity-set harness and the content side-channel tests (§7).
 - **F6** Security write-up + external review + artifact (§8).
 

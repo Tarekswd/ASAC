@@ -24,7 +24,8 @@ potarek/
 │   ├── asac-site/       # lib: search glue - request/query -> index -> rendered HTML page
 │   ├── asac-demo/       # bin: live end-to-end (crawl over Tor -> index -> query -> HTML)
 │   ├── asac-server/     # bin: serve ASAC as a v3 onion service (arti launch_onion_service)
-│   └── asac-rank/       # lib: link-graph authority (PageRank) + BM25xauthority blend, ranking v2 (PLAN 4.3 #4)
+│   ├── asac-rank/       # lib: link-graph authority (PageRank) + BM25xauthority blend, ranking v2 (PLAN 4.3 #4)
+│   └── asac-mix/        # lib: Loopix-style Poisson cover-traffic send scheduler, flagship F4 (PLAN 4.4)
 └── docs/
 ```
 
@@ -45,6 +46,7 @@ potarek/
 | `asac-fetch` | lib | Live `Fetcher` backend for asac-crawler: HTTP(S) over Tor via `arti-client` (onion + clear-web), bridging the sync trait to arti's async client. https uses rustls/ring + Mozilla roots over the Tor stream; follows up to 5 redirects; de-chunks and reads UTF-8 bodies (no gzip). | 4.3 #1 | real; response parsing + redirects tested, live http+https verified |
 | `asac-site` | lib | Search glue: request target/query -> top BM25 candidates from `asac-index` -> re-ranked by `asac-rank` authority -> `asac-frontend` HTML page. The function a live front end calls per request. | 4.3 #5/#6 | real, tested |
 | `asac-rank` | lib | Link-graph authority (PageRank over crawled links) + a BM25xauthority blend; ranking v2. Freshness (the other v2 half) pending. | 4.3 #4 | real, tested |
+| `asac-mix` | lib | Loopix-style rate-λ Poisson send scheduler with cover traffic; the send schedule is independent of real traffic (timing-unlinkable). Flagship F4 metadata layer; live mix transport pending. | 4.4 | real, tested (scheduler core) |
 | `asac-demo` | bin | Live end-to-end: crawl a seed over Tor, index it (safety-gated), answer one query as an HTML page. | 4 | real; manual (needs live Tor) |
 | `asac-server` | bin | Serve ASAC as a v3 onion service: crawl seeds, persist+upsert into an on-disk index, then answer each request with a rendered HTML page over the onion stream (`arti` `launch_onion_service`). http on the onion; one task per request; graceful Ctrl-C shutdown; Equi-X PoW via the opt-in `pow` feature (LGPL `equix`). | 4.3 #5 | real; request parse/response + config tested, live serving manual |
 
