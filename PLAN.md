@@ -311,6 +311,10 @@ query-content guarantee and the metadata anonymity set in Shadow, and write it u
 PoPETs/PETS result (the Caspar Bowden PET Award is given for published PET papers) **(unverified: current
 PoPETs deadlines)**. Do not claim a speed or general-anonymity breakthrough; claim provable query privacy plus
 measured search-path unobservability.
+
+**The full design — the three gaps (private term matching / scale / mixnet), the chosen approaches with
+verified references, the Shadow measurement plan, the proof-and-review gate, and ordered milestones F1-F6 — is
+in [docs/FLAGSHIP-DESIGN.md](FLAGSHIP-DESIGN.md).**
 7. **Decoy queries (optional, client-side, off by default).** The Potato client can mix the user's real searches
    with random, plausible-looking decoy searches, so anyone watching query *timing and volume* cannot pick the
    real ones out of the noise. This is a TrackMeNot / query-obfuscation style defense **(unverified)**. It is the
