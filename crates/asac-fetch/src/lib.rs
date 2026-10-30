@@ -6,6 +6,9 @@
 //! Tokio runtime via `block_on` — fine because the crawler drives the fetcher from an ordinary (non-async)
 //! thread. The HTTP request/response handling follows the raw-stream pattern proven in `crates/potato`.
 //!
+//! Follows up to [`MAX_REDIRECTS`] HTTP redirects (3xx `Location`), so an `http`->`https` redirect reaches the
+//! real page instead of being dropped.
+//!
 //! shortcut: `http` and `https` (TLS over the Tor stream via rustls/ring, Mozilla roots from `webpki-roots`);
 //! response bodies are decoded as UTF-8 and de-chunked only for `Transfer-Encoding: chunked`, with no
 //! gzip/deflate handling. Add body decompression when a target needs it.
@@ -48,32 +51,71 @@ impl TorFetcher {
         ua: &str,
         url: &Url,
     ) -> Result<Page> {
-        let host = url.host_str().ok_or_else(|| anyhow!("url has no host"))?;
-
-        let mut path = url.path().to_string();
-        if let Some(q) = url.query() {
-            path.push('?');
-            path.push_str(q);
-        }
-        if path.is_empty() {
-            path.push('/');
-        }
-
-        match url.scheme() {
-            "http" => {
-                let stream = client.connect((host, url.port().unwrap_or(80))).await.context("tor connect")?;
-                http_exchange(stream, host, &path, ua).await
+        let mut current = url.clone();
+        for _hop in 0..MAX_REDIRECTS {
+            let raw = fetch_once(client, tls, ua, &current).await?;
+            let page = parse_response(&raw);
+            if (300..400).contains(&page.status) {
+                if let Some(next) = redirect_location(&raw, &current) {
+                    current = next;
+                    continue;
+                }
             }
-            "https" => {
-                let stream = client.connect((host, url.port().unwrap_or(443))).await.context("tor connect")?;
-                let server_name = rustls::pki_types::ServerName::try_from(host.to_string())
-                    .map_err(|e| anyhow!("bad TLS server name {host}: {e}"))?;
-                let tls_stream = tls.connect(server_name, stream).await.context("TLS handshake")?;
-                http_exchange(tls_stream, host, &path, ua).await
+            return Ok(page);
+        }
+        Err(anyhow!("too many redirects (>{MAX_REDIRECTS}) starting at {url}"))
+    }
+}
+
+/// Maximum HTTP redirects to follow before giving up.
+const MAX_REDIRECTS: usize = 5;
+
+/// One request/response over Tor (plain or TLS), returning the raw response bytes.
+async fn fetch_once(
+    client: &TorClient<PreferredRuntime>,
+    tls: &TlsConnector,
+    ua: &str,
+    url: &Url,
+) -> Result<Vec<u8>> {
+    let host = url.host_str().ok_or_else(|| anyhow!("url has no host"))?;
+    let mut path = url.path().to_string();
+    if let Some(q) = url.query() {
+        path.push('?');
+        path.push_str(q);
+    }
+    if path.is_empty() {
+        path.push('/');
+    }
+
+    match url.scheme() {
+        "http" => {
+            let stream = client.connect((host, url.port().unwrap_or(80))).await.context("tor connect")?;
+            http_exchange(stream, host, &path, ua).await
+        }
+        "https" => {
+            let stream = client.connect((host, url.port().unwrap_or(443))).await.context("tor connect")?;
+            let server_name = rustls::pki_types::ServerName::try_from(host.to_string())
+                .map_err(|e| anyhow!("bad TLS server name {host}: {e}"))?;
+            let tls_stream = tls.connect(server_name, stream).await.context("TLS handshake")?;
+            http_exchange(tls_stream, host, &path, ua).await
+        }
+        other => Err(anyhow!("unsupported scheme {other:?}")),
+    }
+}
+
+/// The redirect target of a 3xx response: its `Location` resolved against the request URL, `http(s)` only.
+fn redirect_location(raw: &[u8], base: &Url) -> Option<Url> {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.split_once("\r\n\r\n").map_or(text.as_ref(), |(h, _)| h);
+    for line in head.lines().skip(1) {
+        if let Some((k, v)) = line.split_once(':') {
+            if k.trim().eq_ignore_ascii_case("location") {
+                let u = base.join(v.trim()).ok()?;
+                return matches!(u.scheme(), "http" | "https").then_some(u);
             }
-            other => Err(anyhow!("unsupported scheme {other:?}")),
         }
     }
+    None
 }
 
 impl Fetcher for TorFetcher {
@@ -85,9 +127,9 @@ impl Fetcher for TorFetcher {
     }
 }
 
-/// Write a minimal HTTP/1.1 `GET` and read the whole response. Generic over the stream so it serves both the
-/// raw Tor `DataStream` (http) and a TLS stream over it (https).
-async fn http_exchange<S>(mut stream: S, host: &str, path: &str, ua: &str) -> Result<Page>
+/// Write a minimal HTTP/1.1 `GET` and read the whole raw response. Generic over the stream so it serves both
+/// the raw Tor `DataStream` (http) and a TLS stream over it (https).
+async fn http_exchange<S>(mut stream: S, host: &str, path: &str, ua: &str) -> Result<Vec<u8>>
 where
     S: AsyncReadExt + AsyncWriteExt + Unpin,
 {
@@ -99,7 +141,7 @@ Accept: text/html\r\nConnection: close\r\n\r\n"
     stream.flush().await.context("flush request")?; // Arti buffers a partial cell until flush.
     let mut buf = Vec::new();
     stream.read_to_end(&mut buf).await.context("read response")?;
-    Ok(parse_response(&buf))
+    Ok(buf)
 }
 
 /// A TLS client connector trusting the Mozilla root store, using the pure-Rust `ring` crypto provider.
@@ -192,5 +234,25 @@ mod tests {
         let p = parse_response(raw);
         assert_eq!(p.status, 404);
         assert_eq!(p.body, "nope");
+    }
+
+    #[test]
+    fn redirect_location_resolves_absolute_and_relative() {
+        let base = Url::parse("http://example.com/old").unwrap();
+
+        let raw_abs = b"HTTP/1.1 301 Moved\r\nLocation: https://example.com/new\r\n\r\n";
+        assert_eq!(redirect_location(raw_abs, &base).unwrap().as_str(), "https://example.com/new");
+
+        let raw_rel = b"HTTP/1.1 302 Found\r\nlocation: /elsewhere\r\n\r\n";
+        assert_eq!(redirect_location(raw_rel, &base).unwrap().as_str(), "http://example.com/elsewhere");
+    }
+
+    #[test]
+    fn redirect_location_rejects_non_http_schemes_and_missing_header() {
+        let base = Url::parse("http://example.com/").unwrap();
+        let ftp = b"HTTP/1.1 301 Moved\r\nLocation: ftp://example.com/x\r\n\r\n";
+        assert!(redirect_location(ftp, &base).is_none(), "non-http(s) redirect target must be refused");
+        let none = b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\nbody";
+        assert!(redirect_location(none, &base).is_none());
     }
 }
