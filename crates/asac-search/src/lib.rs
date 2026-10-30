@@ -14,7 +14,9 @@
 //! directory** — the client hashes a secret term to a bucket and PIR-fetches it, so the server learns neither
 //! the bucket nor the term, and every response is the same fixed size.
 
-use asac_index::AsacIndex;
+use std::collections::HashMap;
+
+use asac_index::{AsacIndex, AsacReader};
 use asac_pir::single_server::{
     logical_query, preprocess_streaming, ClientState, Params, Permutation, Server, SingleServerDb,
 };
@@ -258,6 +260,39 @@ impl PrivateCorpus {
         Self { keywords, doc_perm, doc_db, doc_hints, n_docs: n }
     }
 
+    /// Build a private corpus from a real index over a public `vocab`: each term's top `per_term` BM25 hits
+    /// become its (relevance-ordered) posting list, and the union of those hits becomes the document set. This
+    /// is the curated top-N corpus of FLAGSHIP-DESIGN.md / PLAN 4.4 #1, with real records and real postings.
+    pub fn from_index(
+        index: &AsacReader,
+        vocab: &[&str],
+        per_term: usize,
+        doc_width: usize,
+        seed: u64,
+    ) -> tantivy::Result<Self> {
+        let mut url_to_id: HashMap<String, u32> = HashMap::new();
+        let mut doc_records: Vec<Vec<u8>> = Vec::new();
+        let mut keyword_entries: Vec<(String, Vec<u32>)> = Vec::new();
+
+        for &term in vocab {
+            let mut ids = Vec::new();
+            for h in index.search_docs(term, per_term)? {
+                let id = match url_to_id.get(&h.url) {
+                    Some(&id) => id,
+                    None => {
+                        let id = doc_records.len() as u32;
+                        doc_records.push(format!("{}\n{}\n{}", h.title, h.url, h.body).into_bytes());
+                        url_to_id.insert(h.url.clone(), id);
+                        id
+                    }
+                };
+                ids.push(id);
+            }
+            keyword_entries.push((term.to_string(), ids));
+        }
+        Ok(Self::build(&doc_records, &keyword_entries, doc_width, seed))
+    }
+
     /// Privately search `term`: fetch its posting list, then fetch each document record. Returns the records
     /// (trailing NUL padding trimmed) in posting-list order. The server learns neither the term nor the docs.
     pub fn search(&mut self, term: &str) -> Vec<Vec<u8>> {
@@ -371,5 +406,27 @@ mod tests {
 
         assert_eq!(corpus.search("beta"), vec![b"doc1:payload".to_vec()]);
         assert!(corpus.search("absent").is_empty());
+    }
+
+    #[test]
+    fn private_corpus_from_a_real_index() {
+        let mut idx = AsacIndex::new().unwrap();
+        let f = ContentFilter::new(NoKnownIllegal);
+        // Enough docs that the doc PIR budget covers a few private fetches.
+        for i in 0..16 {
+            let url = format!("http://x/doc{i}");
+            idx.add(&f, &format!("Doc {i}"), &url, &format!("filler body number {i}"), "").unwrap();
+        }
+        idx.add(&f, "Rust Language", "http://x/rust", "systems programming memory safety ownership", "")
+            .unwrap();
+        idx.commit().unwrap();
+
+        let vocab = ["ownership", "filler"];
+        let mut corpus = PrivateCorpus::from_index(&idx.reader(), &vocab, 3, 256, 5).unwrap();
+
+        let hits = corpus.search("ownership");
+        let texts: Vec<String> = hits.iter().map(|r| String::from_utf8_lossy(r).to_string()).collect();
+        assert!(texts.iter().any(|t| t.contains("Rust Language") && t.contains("http://x/rust")),
+            "privately fetched the real matching doc: {texts:?}");
     }
 }
