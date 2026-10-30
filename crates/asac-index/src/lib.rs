@@ -95,8 +95,8 @@ impl AsacIndex {
         body: &str,
         links: &str,
     ) -> tantivy::Result<Verdict> {
-        // Gate on the body bytes plus the human-visible text (title + body).
-        let verdict = filter.check(body.as_bytes(), &format!("{title} {body}"));
+        // Gate on the URL (host takedowns), the body bytes, and the human-visible text (title + body).
+        let verdict = filter.check(url, body.as_bytes(), &format!("{title} {body}"));
         if matches!(verdict, Verdict::Block(_)) {
             return Ok(verdict);
         }

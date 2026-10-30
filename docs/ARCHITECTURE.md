@@ -36,7 +36,7 @@ potarek/
 | `potato-bench` | bin | SOCKS5 benchmark: connect/TTFB/total/throughput through any proxy. | 6 | real, tested + live |
 | `asac-decoy` | lib | Generate benign decoy queries from a caller-supplied vetted term list. | 4.3 | real, tested |
 | `asac-pir` | lib | PIR so the server can't learn the query. First scheme: trivial PIR (server sends whole small index). | 4.4 | real, tested |
-| `asac-safety` | lib | Pre-index content-safety filter (hash + keyword blocklists + required partner seam); fails closed. | 4.3 #2 | real, tested |
+| `asac-safety` | lib | Pre-index content-safety filter: host blocklist (abuse-report takedowns) + exact-hash + keyword blocklists + required partner hash-match seam; fails closed by construction. | 4.3 #2 | real, tested |
 | `asac-index` | lib | BM25 full-text index (Tantivy); inserts gated by asac-safety; stores title/url/body/links. In-RAM (`new`) or persistent on disk (`open_or_create`); inserts upsert by URL so re-crawls refresh. | 4.3 #3 | real, tested |
 | `asac-search` | lib | End-to-end private search: wires asac-index results into asac-pir single-server PIR over a public vocabulary (top-1-per-term cache), so a term lookup fetches its result without the server learning the term. | 4.3 #6 | real, tested |
 | `asac-crawler` | lib | Polite, robots-respecting crawl core: fetch behind a `Fetcher` trait (onion = arti-client, clear-web = Scrapling over Tor), extract title/text/links (HTML only, no JS), scope + frontier, output feeds asac-index. | 4.3 #1 | real, tested (core; Scrapling clear-web backend pending) |
