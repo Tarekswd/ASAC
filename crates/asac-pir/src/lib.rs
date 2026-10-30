@@ -9,6 +9,7 @@
 //! Upgrade to a sublinear single-server scheme (e.g. a PIANO-style construction) when the index grows — the
 //! `PirServer`/`PirClient` split here is the seam to swap behind.
 
+pub mod sharded;
 pub mod single_server;
 pub mod two_server;
 

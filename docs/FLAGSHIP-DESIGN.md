@@ -176,7 +176,10 @@ Each is a normal, testable step like the ones already shipped; crates in parenth
   learns neither the term nor which docs. `PrivateCorpus::from_index` builds the corpus + postings from a real
   `AsacIndex` over a public vocab, postings ordered by **BM25 blended with link authority** (`asac-rank`), so
   the private path returns best-first like the public one — the curated top-N corpus of PLAN 4.4 #1.
-- **F3** Scale work: sharding + width caps + top-N corpus; Shadow cost measurement vs targets (§4, §7).
+- **F3 — sharding + measurement done; Shadow-scale pending.** Cost measured (§4 table). Sharding primitive
+  (`asac_pir::sharded::ShardedDb`): K independent PIANO shards, total budget sqrt(nK) > sqrt(n), with the
+  shard-index leak documented (query all shards for full privacy). Still to do: width caps tuning and
+  Shadow-scale cost on a large corpus.
 - **F4 — scheduler done.** `asac_mix::PoissonScheduler`: rate-λ Poisson send schedule with a real-message
   queue; the delay schedule is independent of the queue (real vs cover is invisible to a timing observer),
   tested. Remaining: the mix/provider wire protocol and live transport (Sphinx packets, routed loop messages,
