@@ -1,7 +1,10 @@
 # F5 — network-level anonymity measurement in Shadow
 
-**Status: harness spec + config template. NOT run in-repo** (needs Shadow installed, and a built emitter
-binary; see prerequisites). The *scheduler-level* version of this measurement is already done in-repo and
+**Status: harness spec + config template; config validated in Shadow, emitter not yet built.** Shadow 3.3.0
+is installed here and a minimal sim completes; this directory's `mix-anonymity.yaml` was loaded by Shadow and
+parses cleanly (general + GML network + hosts all configure) — the run stops only at the unbuilt `asac-emit`
+binary ("cannot find binary path"), which is the remaining external prerequisite below. The *scheduler-level*
+version of this measurement is already done in-repo and
 tested — `asac_mix::timing_observer_accuracy` shows a timing-only observer is at chance (1/N). This directory
 is the plan for the *network-level* version: the same question with packets actually crossing a simulated
 network and a global observer of the links (FLAGSHIP-DESIGN.md §7, EXTERNAL-PLAN.md item 2).
@@ -18,8 +21,10 @@ network and a global observer of the links (FLAGSHIP-DESIGN.md §7, EXTERNAL-PLA
   officially supports **bare-metal/VM Ubuntu 22.04/24.04, Debian 12/13, Fedora 42** (kernel >= 5.15); building
   needs `sudo apt` for its dev dependencies, and running needs a large `/dev/shm` with seccomp unconfined
   [verified: shadow.github.io install + supported_platforms, 2026-10-31]. **WSL2 is not an officially supported
-  platform** — use a real Linux host, a VM, or a Docker container (`--shm-size=... --security-opt
-  seccomp=unconfined`). (This is why the harness has not been run in this repo's dev environment.)
+  platform** — it works here (Shadow builds, a smoke sim completes, and this template parses), but Shadow prints
+  a determinism warning under WSL2 ("CPU supports rdrand/rdseed but platform can't emulate cpuid... may break
+  determinism", plus no native TSC frequency), so for *reproducible, publishable* numbers use a supported Linux
+  host, a VM, or a Docker container (`--shm-size=... --security-opt seccomp=unconfined`) rather than WSL2.
 - An **emitter binary** `asac-emit` (to be written, ~a few lines): runs a `asac_client::DecoyClient`, framing
   each tick with `asac_mix::frame`, and sends it through a `MixTransport`. For an isolated measurement a
   loopback/socket transport to the observer is enough; for the full path, the Nym transport (EXTERNAL-PLAN

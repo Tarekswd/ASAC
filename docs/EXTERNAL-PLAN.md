@@ -107,7 +107,8 @@ obligations from PIR-SECURITY.md can be done in parallel in this repo whenever y
 
 Real organizations and their **official public channels** (verified 2026-10-31 unless tagged otherwise). No
 personal emails are invented; use the listed public channels and the project's own contact forms. Approach
-openly — explain ASAC's goal and its honest limits, and share PLAN.md / PIR-SECURITY.md.
+openly — explain ASAC's goal and its honest limits, and share PLAN.md / PIR-SECURITY.md. Short, honest
+cold-email templates for each group below are in [OUTREACH.md](OUTREACH.md).
 
 ### Cryptographer review of the PIR work (items 4 / F6; obligations O1, O3, O4, O5)
 - **PETS / PoPETs** — the premier privacy-tech venue, open-access journal with four submission deadlines a
