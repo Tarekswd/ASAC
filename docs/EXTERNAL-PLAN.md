@@ -17,10 +17,12 @@ Ordered roughly by dependency and by how much it unblocks.
 - **Depends on:** nothing new (code is done).
 - **Status (partial):** the **serving** half is observed — `asac-server` bootstraps Tor and publishes a v3
   onion (two instances run side by side, each with its own `.onion` and index). The **client-fetch** half is
-  not yet confirmed: an automated second arti client (a `beta` server crawling `alpha`'s `/search` over Tor)
-  returned "crawled 0 page(s)" within a ~3-minute propagation + ~8-minute fetch window — the fresh onion wasn't
-  retrievable in time. This is reachability latency, not a code fault; confirm with Tor Browser against the
-  printed `.onion`, or a longer-lived deployment.
+  NOT confirmed: an automated second arti client (a `beta` server crawling `alpha`'s `/search` over Tor)
+  returned "crawled 0 page(s)" on every attempt, including a run with 300s descriptor propagation and three
+  retries against a persistent onion. Cause is undetermined — either the onion isn't reachable from a freshly
+  cold-bootstrapped client within the crawler's per-request timeout, or `asac-fetch`/`asac-crawler` doesn't
+  fetch `.onion` URLs correctly (needs investigation). Confirm the end-to-end path with **Tor Browser** against
+  the printed `.onion` on a long-lived `asac-server`; that is the reliable client the step was written for.
 - **Clears:** the "live serving" half of PLAN Phase 4 — turns `asac-server`/`asac-fetch` from "compiles +
   response-parsing tested" into "observed working end to end."
 
