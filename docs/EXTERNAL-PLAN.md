@@ -15,6 +15,12 @@ Ordered roughly by dependency and by how much it unblocks.
   client open `http://<onion>/search?q=...`; confirm a rendezvous connects and the results page renders. Then
   repeat with `--features pow` and `ASAC_RECRAWL_SECS` set.
 - **Depends on:** nothing new (code is done).
+- **Status (partial):** the **serving** half is observed — `asac-server` bootstraps Tor and publishes a v3
+  onion (two instances run side by side, each with its own `.onion` and index). The **client-fetch** half is
+  not yet confirmed: an automated second arti client (a `beta` server crawling `alpha`'s `/search` over Tor)
+  returned "crawled 0 page(s)" within a ~3-minute propagation + ~8-minute fetch window — the fresh onion wasn't
+  retrievable in time. This is reachability latency, not a code fault; confirm with Tor Browser against the
+  printed `.onion`, or a longer-lived deployment.
 - **Clears:** the "live serving" half of PLAN Phase 4 — turns `asac-server`/`asac-fetch` from "compiles +
   response-parsing tested" into "observed working end to end."
 
