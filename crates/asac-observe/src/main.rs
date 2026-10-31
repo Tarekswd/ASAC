@@ -39,7 +39,10 @@ fn main() -> std::io::Result<()> {
         Some(p) => Box::new(std::io::BufWriter::new(std::fs::File::create(p)?)),
         None => Box::new(std::io::stdout()),
     };
-    eprintln!("observer listening on {addr}, writing {}", out.as_deref().unwrap_or("stdout"));
+    eprintln!(
+        "observer listening on {addr}, writing {}",
+        out.as_deref().unwrap_or("stdout")
+    );
     sink.write_all(b"elapsed_ms,src_ip,len\n")?;
     sink.flush()?;
 

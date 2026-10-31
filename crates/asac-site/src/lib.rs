@@ -64,7 +64,11 @@ pub fn search_page(
     let items: Vec<ResultItem> = hits
         .into_iter()
         .map(|h| ResultItem {
-            title: if h.title.is_empty() { h.url.clone() } else { h.title },
+            title: if h.title.is_empty() {
+                h.url.clone()
+            } else {
+                h.title
+            },
             url: h.url,
             snippet: snippet(&h.body),
         })
@@ -101,8 +105,14 @@ mod tests {
     fn index() -> AsacIndex {
         let mut idx = AsacIndex::new().unwrap();
         let f = ContentFilter::new(NoKnownIllegal);
-        idx.add(&f, "Rust Language", "http://site.example/rust", "systems programming memory safety", "")
-            .unwrap();
+        idx.add(
+            &f,
+            "Rust Language",
+            "http://site.example/rust",
+            "systems programming memory safety",
+            "",
+        )
+        .unwrap();
         idx.commit().unwrap();
         idx
     }
@@ -112,7 +122,10 @@ mod tests {
         let idx = index();
         let html = handle(&idx.reader(), "/search?q=memory+safety", 10, &Authority::empty()).unwrap();
         assert!(html.contains("<a href=\"http://site.example/rust\">Rust Language</a>"));
-        assert!(html.contains("systems programming"), "snippet should show body text");
+        assert!(
+            html.contains("systems programming"),
+            "snippet should show body text"
+        );
     }
 
     #[test]
@@ -136,15 +149,20 @@ mod tests {
         let f = ContentFilter::new(NoKnownIllegal);
         let now = now_secs();
         let old = now.saturating_sub(365 * 24 * 3600); // a year old
-        // Same body (equal BM25), no links (equal authority); only recency differs.
-        idx.add_at(&f, "Old", "http://old.example/", "widgets gadgets", "", old).unwrap();
-        idx.add_at(&f, "New", "http://new.example/", "widgets gadgets", "", now).unwrap();
+                                                       // Same body (equal BM25), no links (equal authority); only recency differs.
+        idx.add_at(&f, "Old", "http://old.example/", "widgets gadgets", "", old)
+            .unwrap();
+        idx.add_at(&f, "New", "http://new.example/", "widgets gadgets", "", now)
+            .unwrap();
         idx.commit().unwrap();
 
         let html = search_page(&idx.reader(), "widgets gadgets", 10, &Authority::empty()).unwrap();
         let pos_new = html.find("http://new.example/").unwrap();
         let pos_old = html.find("http://old.example/").unwrap();
-        assert!(pos_new < pos_old, "the fresher doc should rank first on a relevance/authority tie");
+        assert!(
+            pos_new < pos_old,
+            "the fresher doc should rank first on a relevance/authority tie"
+        );
     }
 
     #[test]
@@ -152,20 +170,44 @@ mod tests {
         // Two docs with identical body text (equal BM25 for the query); one is linked by the other two.
         let mut idx = AsacIndex::new().unwrap();
         let f = ContentFilter::new(NoKnownIllegal);
-        idx.add(&f, "Popular", "http://a.example/", "widgets gadgets", "").unwrap();
-        idx.add(&f, "Obscure", "http://c.example/", "widgets gadgets", "http://a.example/").unwrap();
-        idx.add(&f, "Linker", "http://b.example/", "unrelated", "http://a.example/").unwrap();
+        idx.add(&f, "Popular", "http://a.example/", "widgets gadgets", "")
+            .unwrap();
+        idx.add(
+            &f,
+            "Obscure",
+            "http://c.example/",
+            "widgets gadgets",
+            "http://a.example/",
+        )
+        .unwrap();
+        idx.add(
+            &f,
+            "Linker",
+            "http://b.example/",
+            "unrelated",
+            "http://a.example/",
+        )
+        .unwrap();
         idx.commit().unwrap();
 
         let pages = vec![
             ("http://a.example/".to_string(), vec![]),
-            ("http://c.example/".to_string(), vec!["http://a.example/".to_string()]),
-            ("http://b.example/".to_string(), vec!["http://a.example/".to_string()]),
+            (
+                "http://c.example/".to_string(),
+                vec!["http://a.example/".to_string()],
+            ),
+            (
+                "http://b.example/".to_string(),
+                vec!["http://a.example/".to_string()],
+            ),
         ];
         let authority = Authority::from_pages(&pages);
         let html = search_page(&idx.reader(), "widgets gadgets", 10, &authority).unwrap();
         let pos_a = html.find("http://a.example/").unwrap();
         let pos_c = html.find("http://c.example/").unwrap();
-        assert!(pos_a < pos_c, "the linked-to page should rank above the equally-relevant obscure one");
+        assert!(
+            pos_a < pos_c,
+            "the linked-to page should rank above the equally-relevant obscure one"
+        );
     }
 }

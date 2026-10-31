@@ -113,7 +113,10 @@ mod tests {
 
     #[test]
     fn escape_covers_all_five_entities() {
-        assert_eq!(escape(r#"<a href="x" id='y'>&"#), "&lt;a href=&quot;x&quot; id=&#39;y&#39;&gt;&amp;");
+        assert_eq!(
+            escape(r#"<a href="x" id='y'>&"#),
+            "&lt;a href=&quot;x&quot; id=&#39;y&#39;&gt;&amp;"
+        );
     }
 
     #[test]
@@ -136,18 +139,30 @@ mod tests {
         // No raw markup from untrusted input survived.
         assert!(!html.contains("<script>"), "query must be escaped");
         assert!(!html.contains("<img src=x"), "result title must be escaped");
-        assert!(!html.contains(r#"onmouseover="x""#), "attribute breakout must be escaped");
+        assert!(
+            !html.contains(r#"onmouseover="x""#),
+            "attribute breakout must be escaped"
+        );
         // javascript: URL is never linked.
-        assert!(!html.contains("href=\"javascript:"), "non-http URL must not become a link");
+        assert!(
+            !html.contains("href=\"javascript:"),
+            "non-http URL must not become a link"
+        );
         // The legitimate http result IS linked.
         assert!(html.contains("<a href=\"http://site.example/a\">Good Page</a>"));
         // No script tag at all (no-JS rule).
-        assert!(!html.to_lowercase().contains("<script"), "page must contain no JavaScript");
+        assert!(
+            !html.to_lowercase().contains("<script"),
+            "page must contain no JavaScript"
+        );
     }
 
     #[test]
     fn query_parsing_decodes_and_handles_missing() {
-        assert_eq!(query_from_target("/search?q=hello+world").as_deref(), Some("hello world"));
+        assert_eq!(
+            query_from_target("/search?q=hello+world").as_deref(),
+            Some("hello world")
+        );
         assert_eq!(query_from_target("/search?q=caf%C3%A9").as_deref(), Some("café"));
         assert_eq!(query_from_target("/search?x=1").as_deref(), None);
         assert_eq!(query_from_target("/").as_deref(), None);

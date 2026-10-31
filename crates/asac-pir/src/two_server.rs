@@ -60,7 +60,11 @@ impl<'a> TwoServerServer<'a> {
     /// `answer = XOR of rows[k] for every k with select[k] == true`. The server cannot tell which single row
     /// the client ultimately wants, because `select` is one of two random vectors (see [`make_queries`]).
     pub fn answer(&self, select: &[bool]) -> Vec<u8> {
-        assert_eq!(select.len(), self.db.rows.len(), "selection vector length must equal row count");
+        assert_eq!(
+            select.len(),
+            self.db.rows.len(),
+            "selection vector length must equal row count"
+        );
         let mut acc = vec![0u8; self.db.width];
         for (k, &bit) in select.iter().enumerate() {
             if bit {

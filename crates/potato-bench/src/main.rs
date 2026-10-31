@@ -39,12 +39,42 @@ fn parse_args() -> Args {
     let mut it = std::env::args().skip(1);
     while let Some(flag) = it.next() {
         match flag.as_str() {
-            "--proxy" => if let Some(v) = it.next() { a.proxy = v; },
-            "--host" => if let Some(v) = it.next() { a.host = v; },
-            "--port" => if let Some(v) = it.next() { if let Ok(p) = v.parse() { a.port = p; } },
-            "--path" => if let Some(v) = it.next() { a.path = v; },
-            "--reps" => if let Some(v) = it.next() { if let Ok(n) = v.parse() { a.reps = n; } },
-            "--timeout" => if let Some(v) = it.next() { if let Ok(s) = v.parse() { a.timeout_s = s; } },
+            "--proxy" => {
+                if let Some(v) = it.next() {
+                    a.proxy = v;
+                }
+            }
+            "--host" => {
+                if let Some(v) = it.next() {
+                    a.host = v;
+                }
+            }
+            "--port" => {
+                if let Some(v) = it.next() {
+                    if let Ok(p) = v.parse() {
+                        a.port = p;
+                    }
+                }
+            }
+            "--path" => {
+                if let Some(v) = it.next() {
+                    a.path = v;
+                }
+            }
+            "--reps" => {
+                if let Some(v) = it.next() {
+                    if let Ok(n) = v.parse() {
+                        a.reps = n;
+                    }
+                }
+            }
+            "--timeout" => {
+                if let Some(v) = it.next() {
+                    if let Ok(s) = v.parse() {
+                        a.timeout_s = s;
+                    }
+                }
+            }
             other => eprintln!("ignoring unknown arg: {other}"),
         }
     }
@@ -90,8 +120,14 @@ async fn socks5_open(proxy: &str, host: &str, port: u16) -> Result<TcpStream> {
     }
     // Consume the bound address + port per ATYP.
     match head[3] {
-        0x01 => { let mut b = [0u8; 4]; s.read_exact(&mut b).await?; }
-        0x04 => { let mut b = [0u8; 16]; s.read_exact(&mut b).await?; }
+        0x01 => {
+            let mut b = [0u8; 4];
+            s.read_exact(&mut b).await?;
+        }
+        0x04 => {
+            let mut b = [0u8; 16];
+            s.read_exact(&mut b).await?;
+        }
         0x03 => {
             let mut len = [0u8; 1];
             s.read_exact(&mut len).await?;
@@ -152,7 +188,13 @@ async fn one_fetch(a: &Args) -> Result<Metrics> {
     } else {
         0.0
     };
-    Ok(Metrics { connect_ms, ttfb_ms, total_ms, bytes, throughput_kib_s })
+    Ok(Metrics {
+        connect_ms,
+        ttfb_ms,
+        total_ms,
+        bytes,
+        throughput_kib_s,
+    })
 }
 
 #[tokio::main]

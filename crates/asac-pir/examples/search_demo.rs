@@ -16,7 +16,10 @@ fn main() {
     let query = "maps";
     let row = terms.iter().position(|&t| t == query).expect("term in index");
 
-    println!("index has {} terms; searching for \"{query}\" (row {row})\n", terms.len());
+    println!(
+        "index has {} terms; searching for \"{query}\" (row {row})\n",
+        terms.len()
+    );
 
     // --- Scheme 1: trivial PIR ---
     let mut db = PirDatabase::new();

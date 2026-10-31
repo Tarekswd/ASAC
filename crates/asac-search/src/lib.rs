@@ -17,10 +17,10 @@
 use std::collections::{HashMap, HashSet};
 
 use asac_index::{AsacIndex, AsacReader};
-use asac_rank::{blend, Authority};
 use asac_pir::single_server::{
     logical_query, preprocess_streaming, ClientState, Params, Permutation, Server, SingleServerDb,
 };
+use asac_rank::{blend, Authority};
 
 /// Smallest perfect square >= n, and at least 4 (PIR needs sqrt(n) >= 2).
 fn perfect_square_at_least(n: usize) -> usize {
@@ -69,10 +69,20 @@ impl PrivateSearch {
         }
         let server_db = SingleServerDb::from_records(&permuted);
         let s = (n as f64).sqrt() as usize;
-        let hints =
-            preprocess_streaming(n, width, Params::for_sqrt_n(s), seed.wrapping_add(1), permuted.iter().cloned());
+        let hints = preprocess_streaming(
+            n,
+            width,
+            Params::for_sqrt_n(s),
+            seed.wrapping_add(1),
+            permuted.iter().cloned(),
+        );
 
-        Ok(Self { directory, perm, server_db, hints })
+        Ok(Self {
+            directory,
+            perm,
+            server_db,
+            hints,
+        })
     }
 
     /// Privately search for `term`: map it to a row locally, then PIR-fetch the cached result. Returns the
@@ -170,7 +180,12 @@ impl PrivateKeyword {
             seed.wrapping_add(1),
             permuted.iter().cloned(),
         );
-        Self { n_buckets: n, perm, server_db, hints }
+        Self {
+            n_buckets: n,
+            perm,
+            server_db,
+            hints,
+        }
     }
 
     /// Privately fetch `term`'s posting list. The server never learns `term`. Returns `None` if absent.
@@ -269,7 +284,15 @@ impl PrivateCorpus {
         // Fetch a constant number of docs per search, bounded by the per-chunk budget (sqrt(n)): this count is
         // a corpus constant, independent of the query, so it never reveals a term's posting-list length.
         let fetches_per_query = MAX_FETCHES_PER_QUERY.min(s).max(1);
-        Self { keywords, doc_perm, doc_db, doc_hints, n_docs: n, fetches_per_query, cursor: 0 }
+        Self {
+            keywords,
+            doc_perm,
+            doc_db,
+            doc_hints,
+            n_docs: n,
+            fetches_per_query,
+            cursor: 0,
+        }
     }
 
     /// Build a private corpus from a real index over a public `vocab`: each term's top `per_term` hits become
@@ -305,7 +328,12 @@ impl PrivateCorpus {
                     }
                 };
                 if seen_page.insert(h.url.clone()) {
-                    let links = h.links.split('\n').filter(|s| !s.is_empty()).map(str::to_string).collect();
+                    let links = h
+                        .links
+                        .split('\n')
+                        .filter(|s| !s.is_empty())
+                        .map(str::to_string)
+                        .collect();
                     pages.push((h.url.clone(), links));
                 }
                 hits.push((id, h.url.clone(), h.score));
@@ -339,8 +367,12 @@ impl PrivateCorpus {
 
         // Exactly k distinct logical indices: the real ids (capped at k, already ranked), padded with other
         // distinct indices so the fetch count is constant.
-        let mut to_fetch: Vec<usize> =
-            ids.iter().take(k).map(|&i| i as usize).filter(|&i| i < self.n_docs).collect();
+        let mut to_fetch: Vec<usize> = ids
+            .iter()
+            .take(k)
+            .map(|&i| i as usize)
+            .filter(|&i| i < self.n_docs)
+            .collect();
         let real_count = to_fetch.len();
         // Pad with distinct indices starting from a rotating cursor, so repeated searches spread their dummy
         // fetches over the index space instead of hammering one chunk's PIR budget.
@@ -382,11 +414,30 @@ mod tests {
     fn populated_index() -> AsacIndex {
         let mut idx = AsacIndex::new().unwrap();
         let f = ContentFilter::new(NoKnownIllegal);
-        idx.add(&f, "Weather Today", "http://x/weather", "sunny forecast rain clouds temperature", "")
-            .unwrap();
-        idx.add(&f, "Pasta Recipe", "http://x/pasta", "boil pasta tomato sauce garlic basil", "").unwrap();
-        idx.add(&f, "Rust Language", "http://x/rust", "systems programming memory safety ownership", "")
-            .unwrap();
+        idx.add(
+            &f,
+            "Weather Today",
+            "http://x/weather",
+            "sunny forecast rain clouds temperature",
+            "",
+        )
+        .unwrap();
+        idx.add(
+            &f,
+            "Pasta Recipe",
+            "http://x/pasta",
+            "boil pasta tomato sauce garlic basil",
+            "",
+        )
+        .unwrap();
+        idx.add(
+            &f,
+            "Rust Language",
+            "http://x/rust",
+            "systems programming memory safety ownership",
+            "",
+        )
+        .unwrap();
         idx.commit().unwrap();
         idx
     }
@@ -401,7 +452,10 @@ mod tests {
         assert!(r.contains("Pasta Recipe"), "fetched the wrong cached result: {r}");
 
         let r2 = ps.search("rust").expect("a result for 'rust'");
-        assert!(r2.contains("Rust Language"), "fetched the wrong cached result: {r2}");
+        assert!(
+            r2.contains("Rust Language"),
+            "fetched the wrong cached result: {r2}"
+        );
     }
 
     #[test]
@@ -414,8 +468,7 @@ mod tests {
     #[test]
     fn keyword_pir_returns_posting_lists_for_a_secret_term() {
         // A realistic-ish corpus so PIANO's query budget (scales with sqrt(buckets)) covers several lookups.
-        let mut entries: Vec<(String, Vec<u32>)> =
-            (0..32).map(|i| (format!("filler{i}"), vec![i])).collect();
+        let mut entries: Vec<(String, Vec<u32>)> = (0..32).map(|i| (format!("filler{i}"), vec![i])).collect();
         entries.push(("rust".to_string(), vec![1, 2, 3]));
         entries.push(("tor".to_string(), vec![7]));
         entries.push(("pasta".to_string(), vec![9, 10, 11, 12]));
@@ -441,7 +494,11 @@ mod tests {
         let entries = vec![("many", big)];
         let mut kw = PrivateKeyword::build(&entries, 1);
         let got = kw.lookup("many").expect("present");
-        assert_eq!(got.len(), MAX_DOCS_PER_TERM, "posting list is truncated to the fixed cap");
+        assert_eq!(
+            got.len(),
+            MAX_DOCS_PER_TERM,
+            "posting list is truncated to the fixed cap"
+        );
         assert_eq!(got[0], 0);
     }
 
@@ -453,7 +510,10 @@ mod tests {
         let mut corpus = PrivateCorpus::build(&docs, &keyword_entries, 64, 9);
 
         let hits = corpus.search("alpha");
-        let texts: Vec<String> = hits.iter().map(|r| String::from_utf8_lossy(r).to_string()).collect();
+        let texts: Vec<String> = hits
+            .iter()
+            .map(|r| String::from_utf8_lossy(r).to_string())
+            .collect();
         assert_eq!(texts.len(), 3, "alpha's three docs, fetched privately");
         assert!(texts.iter().any(|t| t == "doc0:payload"));
         assert!(texts.iter().any(|t| t == "doc5:payload"));
@@ -470,18 +530,38 @@ mod tests {
         // Enough docs that the doc PIR budget covers a few private fetches.
         for i in 0..16 {
             let url = format!("http://x/doc{i}");
-            idx.add(&f, &format!("Doc {i}"), &url, &format!("filler body number {i}"), "").unwrap();
-        }
-        idx.add(&f, "Rust Language", "http://x/rust", "systems programming memory safety ownership", "")
+            idx.add(
+                &f,
+                &format!("Doc {i}"),
+                &url,
+                &format!("filler body number {i}"),
+                "",
+            )
             .unwrap();
+        }
+        idx.add(
+            &f,
+            "Rust Language",
+            "http://x/rust",
+            "systems programming memory safety ownership",
+            "",
+        )
+        .unwrap();
         idx.commit().unwrap();
 
         let vocab = ["ownership", "filler"];
         let mut corpus = PrivateCorpus::from_index(&idx.reader(), &vocab, 3, 256, 5).unwrap();
 
         let hits = corpus.search("ownership");
-        let texts: Vec<String> = hits.iter().map(|r| String::from_utf8_lossy(r).to_string()).collect();
-        assert!(texts.iter().any(|t| t.contains("Rust Language") && t.contains("http://x/rust")),
-            "privately fetched the real matching doc: {texts:?}");
+        let texts: Vec<String> = hits
+            .iter()
+            .map(|r| String::from_utf8_lossy(r).to_string())
+            .collect();
+        assert!(
+            texts
+                .iter()
+                .any(|t| t.contains("Rust Language") && t.contains("http://x/rust")),
+            "privately fetched the real matching doc: {texts:?}"
+        );
     }
 }

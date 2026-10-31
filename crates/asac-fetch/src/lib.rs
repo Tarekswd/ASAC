@@ -42,7 +42,12 @@ impl TorFetcher {
         let client = rt
             .block_on(TorClient::create_bootstrapped(TorClientConfig::default()))
             .context("bootstrap Tor client")?;
-        Ok(Self { rt, client, tls: tls_connector(), user_agent: user_agent.to_string() })
+        Ok(Self {
+            rt,
+            client,
+            tls: tls_connector(),
+            user_agent: user_agent.to_string(),
+        })
     }
 
     async fn get(
@@ -89,11 +94,17 @@ async fn fetch_once(
 
     match url.scheme() {
         "http" => {
-            let stream = client.connect((host, url.port().unwrap_or(80))).await.context("tor connect")?;
+            let stream = client
+                .connect((host, url.port().unwrap_or(80)))
+                .await
+                .context("tor connect")?;
             http_exchange(stream, host, &path, ua).await
         }
         "https" => {
-            let stream = client.connect((host, url.port().unwrap_or(443))).await.context("tor connect")?;
+            let stream = client
+                .connect((host, url.port().unwrap_or(443)))
+                .await
+                .context("tor connect")?;
             let server_name = rustls::pki_types::ServerName::try_from(host.to_string())
                 .map_err(|e| anyhow!("bad TLS server name {host}: {e}"))?;
             let tls_stream = tls.connect(server_name, stream).await.context("TLS handshake")?;
@@ -155,11 +166,12 @@ Accept: text/html\r\nAccept-Encoding: gzip, deflate\r\nConnection: close\r\n\r\n
 /// A TLS client connector trusting the Mozilla root store, using the pure-Rust `ring` crypto provider.
 fn tls_connector() -> TlsConnector {
     let roots = rustls::RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
-    let config = rustls::ClientConfig::builder_with_provider(Arc::new(rustls::crypto::ring::default_provider()))
-        .with_safe_default_protocol_versions()
-        .expect("ring provider supports the default TLS versions")
-        .with_root_certificates(roots)
-        .with_no_client_auth();
+    let config =
+        rustls::ClientConfig::builder_with_provider(Arc::new(rustls::crypto::ring::default_provider()))
+            .with_safe_default_protocol_versions()
+            .expect("ring provider supports the default TLS versions")
+            .with_root_certificates(roots)
+            .with_no_client_auth();
     TlsConnector::from(Arc::new(config))
 }
 
@@ -199,10 +211,18 @@ fn parse_response(raw: &[u8]) -> Page {
         }
     }
 
-    let dechunked = if chunked { dechunk(body_bytes) } else { body_bytes.to_vec() };
+    let dechunked = if chunked {
+        dechunk(body_bytes)
+    } else {
+        body_bytes.to_vec()
+    };
     let decoded = decompress(&dechunked, &encoding);
     let body = String::from_utf8_lossy(&decoded).into_owned();
-    Page { status, content_type, body }
+    Page {
+        status,
+        content_type,
+        body,
+    }
 }
 
 /// Decode an HTTP/1.1 chunked transfer body (chunk = hex size line, CRLF, bytes, CRLF; terminated by a 0 size).
@@ -243,7 +263,9 @@ fn decompress(body: &[u8], encoding: &str) -> Vec<u8> {
         r.read_to_end(&mut out).ok().map(|_| out)
     };
     match encoding {
-        "gzip" | "x-gzip" => read_all(Box::new(flate2::read::GzDecoder::new(body))).unwrap_or_else(|| body.to_vec()),
+        "gzip" | "x-gzip" => {
+            read_all(Box::new(flate2::read::GzDecoder::new(body))).unwrap_or_else(|| body.to_vec())
+        }
         // HTTP "deflate" is usually zlib-wrapped; fall back to raw deflate.
         "deflate" => read_all(Box::new(flate2::read::ZlibDecoder::new(body)))
             .or_else(|| read_all(Box::new(flate2::read::DeflateDecoder::new(body))))
@@ -290,7 +312,8 @@ mod tests {
         enc.write_all(b"<html>hello gzip</html>").unwrap();
         let gz = enc.finish().unwrap();
 
-        let mut raw = b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Encoding: gzip\r\n\r\n".to_vec();
+        let mut raw =
+            b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Encoding: gzip\r\n\r\n".to_vec();
         raw.extend_from_slice(&gz);
 
         let p = parse_response(&raw);
@@ -321,17 +344,26 @@ mod tests {
         let base = Url::parse("http://example.com/old").unwrap();
 
         let raw_abs = b"HTTP/1.1 301 Moved\r\nLocation: https://example.com/new\r\n\r\n";
-        assert_eq!(redirect_location(raw_abs, &base).unwrap().as_str(), "https://example.com/new");
+        assert_eq!(
+            redirect_location(raw_abs, &base).unwrap().as_str(),
+            "https://example.com/new"
+        );
 
         let raw_rel = b"HTTP/1.1 302 Found\r\nlocation: /elsewhere\r\n\r\n";
-        assert_eq!(redirect_location(raw_rel, &base).unwrap().as_str(), "http://example.com/elsewhere");
+        assert_eq!(
+            redirect_location(raw_rel, &base).unwrap().as_str(),
+            "http://example.com/elsewhere"
+        );
     }
 
     #[test]
     fn redirect_location_rejects_non_http_schemes_and_missing_header() {
         let base = Url::parse("http://example.com/").unwrap();
         let ftp = b"HTTP/1.1 301 Moved\r\nLocation: ftp://example.com/x\r\n\r\n";
-        assert!(redirect_location(ftp, &base).is_none(), "non-http(s) redirect target must be refused");
+        assert!(
+            redirect_location(ftp, &base).is_none(),
+            "non-http(s) redirect target must be refused"
+        );
         let none = b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\nbody";
         assert!(redirect_location(none, &base).is_none());
     }

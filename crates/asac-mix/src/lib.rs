@@ -46,7 +46,11 @@ impl PoissonScheduler {
     /// New scheduler sending at `rate` messages per unit time (must be > 0).
     pub fn new(rate: f64, seed: u64) -> Self {
         assert!(rate > 0.0, "rate must be positive");
-        Self { rate, state: seed, queue: VecDeque::new() }
+        Self {
+            rate,
+            state: seed,
+            queue: VecDeque::new(),
+        }
     }
 
     /// Queue a real message to be sent at one of the next ticks.
@@ -66,7 +70,11 @@ impl PoissonScheduler {
     /// The next tick: the delay to wait, and what to send (a real queued message if any, else cover).
     pub fn next_send(&mut self) -> (f64, Payload) {
         let delay = self.next_delay();
-        let payload = self.queue.pop_front().map(Payload::Real).unwrap_or(Payload::Cover);
+        let payload = self
+            .queue
+            .pop_front()
+            .map(Payload::Real)
+            .unwrap_or(Payload::Cover);
         (delay, payload)
     }
 }
@@ -192,7 +200,10 @@ mod tests {
             assert_eq!(d_idle, d_busy, "delay at tick {i} must not depend on the queue");
             assert_eq!(p_idle, Payload::Cover, "idle client always covers");
             if i < 2 {
-                assert!(matches!(p_busy, Payload::Real(_)), "busy client sends its real messages first");
+                assert!(
+                    matches!(p_busy, Payload::Real(_)),
+                    "busy client sends its real messages first"
+                );
             } else {
                 assert_eq!(p_busy, Payload::Cover, "then covers, same as idle");
             }
@@ -205,7 +216,11 @@ mod tests {
         let mut s = PoissonScheduler::new(rate, 42);
         let n = 100_000;
         let mean: f64 = (0..n).map(|_| s.next_delay()).sum::<f64>() / n as f64;
-        assert!((mean - 1.0 / rate).abs() < 0.01, "mean delay {mean} should be ~{}", 1.0 / rate);
+        assert!(
+            (mean - 1.0 / rate).abs() < 0.01,
+            "mean delay {mean} should be ~{}",
+            1.0 / rate
+        );
     }
 
     #[test]
@@ -223,7 +238,10 @@ mod tests {
         assert_eq!(unframe(&p).unwrap(), b"private search");
 
         // Cover (empty payload) frames to the same size as a real payload — no length side channel.
-        assert_eq!(frame(&[], 64).unwrap().len(), frame(b"anything", 64).unwrap().len());
+        assert_eq!(
+            frame(&[], 64).unwrap().len(),
+            frame(b"anything", 64).unwrap().len()
+        );
         assert_eq!(unframe(&frame(&[], 64).unwrap()).unwrap(), b"");
 
         // Too big for the packet.
@@ -244,7 +262,9 @@ mod tests {
             }
         }
 
-        let transport = Fake { lens: RefCell::new(Vec::new()) };
+        let transport = Fake {
+            lens: RefCell::new(Vec::new()),
+        };
         let mut sched = PoissonScheduler::new(2.0, 5);
         sched.enqueue(b"the real query".to_vec());
 
@@ -255,7 +275,10 @@ mod tests {
         }
         let lens = transport.lens.borrow();
         assert_eq!(lens.len(), 25);
-        assert!(lens.iter().all(|&l| l == 128), "real and cover packets must all be 128 bytes on the wire");
+        assert!(
+            lens.iter().all(|&l| l == 128),
+            "real and cover packets must all be 128 bytes on the wire"
+        );
     }
 
     #[test]
@@ -265,6 +288,9 @@ mod tests {
         let n = 10;
         let acc = timing_observer_accuracy(n, 3, 200, 4000, 2.0, 0xA5AC);
         let chance = 1.0 / n as f64;
-        assert!((acc - chance).abs() < 0.03, "observer accuracy {acc} should be ~{chance} (chance)");
+        assert!(
+            (acc - chance).abs() < 0.03,
+            "observer accuracy {acc} should be ~{chance} (chance)"
+        );
     }
 }

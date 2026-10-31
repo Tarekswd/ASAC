@@ -58,7 +58,9 @@ pub fn extract(base: &Url, html: &str) -> Extracted {
 
     // Walk the body's text nodes, skipping any whose ancestry includes a non-text tag.
     let mut text = String::new();
-    let body = Selector::parse("body").ok().and_then(|sel| doc.select(&sel).next());
+    let body = Selector::parse("body")
+        .ok()
+        .and_then(|sel| doc.select(&sel).next());
     let root = body.map(|b| *b).unwrap_or_else(|| doc.tree.root());
     for node in root.descendants() {
         let Some(t) = node.value().as_text() else { continue };
@@ -111,7 +113,11 @@ pub struct CrawlConfig {
 
 impl Default for CrawlConfig {
     fn default() -> Self {
-        Self { user_agent: "asac-crawler".to_string(), max_pages: 1000, same_host_only: true }
+        Self {
+            user_agent: "asac-crawler".to_string(),
+            max_pages: 1000,
+            same_host_only: true,
+        }
     }
 }
 
@@ -164,7 +170,12 @@ pub fn crawl<F: Fetcher>(fetcher: &F, seeds: &[&str], cfg: &CrawlConfig) -> Vec<
                 queue.push_back(u);
             }
         }
-        out.push(CrawledDoc { url: url.to_string(), title: ex.title, text: ex.text, links: ex.links });
+        out.push(CrawledDoc {
+            url: url.to_string(),
+            title: ex.title,
+            text: ex.text,
+            links: ex.links,
+        });
     }
     out
 }
@@ -202,12 +213,18 @@ mod tests {
     }
     impl FakeFetcher {
         fn new() -> Self {
-            Self { pages: HashMap::new() }
+            Self {
+                pages: HashMap::new(),
+            }
         }
         fn add(&mut self, url: &str, content_type: &str, body: &str) {
             self.pages.insert(
                 url.to_string(),
-                Page { status: 200, content_type: content_type.to_string(), body: body.to_string() },
+                Page {
+                    status: 200,
+                    content_type: content_type.to_string(),
+                    body: body.to_string(),
+                },
             );
         }
     }
@@ -236,21 +253,42 @@ mod tests {
         let ex = extract(&base, html);
         assert_eq!(ex.title, "Hello World");
         assert!(ex.text.contains("Greetings") && ex.text.contains("Visible text here."));
-        assert!(!ex.text.contains("secret"), "script text must not be indexed: {}", ex.text);
+        assert!(
+            !ex.text.contains("secret"),
+            "script text must not be indexed: {}",
+            ex.text
+        );
         assert!(!ex.text.contains("color:red"), "style text must not be indexed");
-        assert!(ex.links.contains(&"http://site.example/dir/next.html".to_string()));
+        assert!(ex
+            .links
+            .contains(&"http://site.example/dir/next.html".to_string()));
         assert!(ex.links.contains(&"http://other.example/x".to_string()));
-        assert!(!ex.links.iter().any(|l| l.starts_with("mailto")), "non-http links dropped");
+        assert!(
+            !ex.links.iter().any(|l| l.starts_with("mailto")),
+            "non-http links dropped"
+        );
     }
 
     #[test]
     fn crawl_respects_robots_scope_and_cap() {
         let mut f = FakeFetcher::new();
-        f.add("http://site.example/robots.txt", "text/plain", "User-Agent: *\nDisallow: /private");
+        f.add(
+            "http://site.example/robots.txt",
+            "text/plain",
+            "User-Agent: *\nDisallow: /private",
+        );
         f.add("http://site.example/", "text/html",
             r#"<a href="/a.html">a</a><a href="/private/secret.html">p</a><a href="http://evil.example/">e</a>"#);
-        f.add("http://site.example/a.html", "text/html", "<title>Page A</title><p>alpha</p>");
-        f.add("http://site.example/private/secret.html", "text/html", "<p>should be skipped</p>");
+        f.add(
+            "http://site.example/a.html",
+            "text/html",
+            "<title>Page A</title><p>alpha</p>",
+        );
+        f.add(
+            "http://site.example/private/secret.html",
+            "text/html",
+            "<p>should be skipped</p>",
+        );
         f.add("http://evil.example/", "text/html", "<p>off host</p>");
 
         let docs = crawl(&f, &["http://site.example/"], &CrawlConfig::default());
@@ -258,8 +296,14 @@ mod tests {
 
         assert!(urls.contains(&"http://site.example/"));
         assert!(urls.contains(&"http://site.example/a.html"));
-        assert!(!urls.iter().any(|u| u.contains("/private/")), "robots Disallow must be honored");
-        assert!(!urls.iter().any(|u| u.contains("evil.example")), "same_host_only must keep us on host");
+        assert!(
+            !urls.iter().any(|u| u.contains("/private/")),
+            "robots Disallow must be honored"
+        );
+        assert!(
+            !urls.iter().any(|u| u.contains("evil.example")),
+            "same_host_only must keep us on host"
+        );
     }
 
     #[test]
@@ -274,8 +318,11 @@ mod tests {
         }
 
         let mut f = FakeFetcher::new();
-        f.add("http://site.example/", "text/html",
-            "<title>Rust Crawler</title><p>systems programming memory safety</p>");
+        f.add(
+            "http://site.example/",
+            "text/html",
+            "<title>Rust Crawler</title><p>systems programming memory safety</p>",
+        );
 
         let docs = crawl(&f, &["http://site.example/"], &CrawlConfig::default());
         assert!(!docs.is_empty());
@@ -283,11 +330,15 @@ mod tests {
         let mut idx = AsacIndex::new().unwrap();
         let filter = ContentFilter::new(NoKnownIllegal);
         for d in &docs {
-            idx.add(&filter, &d.title, &d.url, &d.text, &d.links.join("\n")).unwrap();
+            idx.add(&filter, &d.title, &d.url, &d.text, &d.links.join("\n"))
+                .unwrap();
         }
         idx.commit().unwrap();
 
         let hits = idx.search("memory safety", 5).unwrap();
-        assert!(hits[0].json.contains("Rust Crawler"), "crawled page must be searchable");
+        assert!(
+            hits[0].json.contains("Rust Crawler"),
+            "crawled page must be searchable"
+        );
     }
 }

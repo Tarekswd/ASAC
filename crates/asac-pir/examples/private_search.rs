@@ -12,8 +12,22 @@ use asac_pir::single_server::{
 fn main() {
     // Public directory: the term set is public; which term you search is private.
     let terms = [
-        "weather", "recipes", "maps", "dictionary", "news", "music", "books", "travel", "health",
-        "finance", "sports", "science", "art", "history", "food", "games",
+        "weather",
+        "recipes",
+        "maps",
+        "dictionary",
+        "news",
+        "music",
+        "books",
+        "travel",
+        "health",
+        "finance",
+        "sports",
+        "science",
+        "art",
+        "history",
+        "food",
+        "games",
     ]; // 16 = a perfect square
     let n = terms.len();
     let width = 32usize;
@@ -40,12 +54,24 @@ fn main() {
     let query = "maps";
     let row = terms.iter().position(|&t| t == query).expect("term in directory");
     let got = logical_query(&mut state, &perm, row, &server);
-    println!("search {query:?} -> {}", String::from_utf8_lossy(&got).trim_end_matches('\0'));
+    println!(
+        "search {query:?} -> {}",
+        String::from_utf8_lossy(&got).trim_end_matches('\0')
+    );
     println!("the server never received the term {query:?} (it saw sqrt(n) random-looking indices).\n");
 
     let s = (n as f64).sqrt() as usize;
     println!("per-query transfer cost over n={n} records x {width} B:");
-    println!("  trivial PIR      : download {} B (the whole index -> O(n))", n * width);
-    println!("  2-server XOR PIR : download {} B (2 x one record) + two {}-bit query vectors", 2 * width, n);
-    println!("  single-server    : download {width} B (one record) + {s} indices up  <- O(sqrt(n)), one server");
+    println!(
+        "  trivial PIR      : download {} B (the whole index -> O(n))",
+        n * width
+    );
+    println!(
+        "  2-server XOR PIR : download {} B (2 x one record) + two {}-bit query vectors",
+        2 * width,
+        n
+    );
+    println!(
+        "  single-server    : download {width} B (one record) + {s} indices up  <- O(sqrt(n)), one server"
+    );
 }

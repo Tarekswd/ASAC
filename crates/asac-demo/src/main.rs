@@ -23,7 +23,10 @@ impl HashMatchBackend for NoKnownIllegal {
 fn main() -> anyhow::Result<()> {
     let args: Vec<String> = std::env::args().collect();
     if args.len() < 3 {
-        eprintln!("usage: {} <seed-http-url> <query>", args.first().map(String::as_str).unwrap_or("asac-demo"));
+        eprintln!(
+            "usage: {} <seed-http-url> <query>",
+            args.first().map(String::as_str).unwrap_or("asac-demo")
+        );
         std::process::exit(2);
     }
     let seed = &args[1];
@@ -33,7 +36,10 @@ fn main() -> anyhow::Result<()> {
     let fetcher = TorFetcher::bootstrap("asac-crawler/0.0 (+https://github.com/Tarekswd/asac)")?;
 
     eprintln!("crawling {seed} over Tor...");
-    let cfg = CrawlConfig { max_pages: 20, ..CrawlConfig::default() };
+    let cfg = CrawlConfig {
+        max_pages: 20,
+        ..CrawlConfig::default()
+    };
     let docs = crawl(&fetcher, &[seed.as_str()], &cfg);
     eprintln!("crawled {} page(s)", docs.len());
 

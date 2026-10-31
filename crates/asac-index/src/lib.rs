@@ -37,7 +37,9 @@ pub struct DocHit {
 /// field as an array of values (tolerant of a bare string too).
 fn first_str(v: &serde_json::Value, key: &str) -> String {
     match v.get(key) {
-        Some(serde_json::Value::Array(a)) => a.first().and_then(|x| x.as_str()).unwrap_or_default().to_string(),
+        Some(serde_json::Value::Array(a)) => {
+            a.first().and_then(|x| x.as_str()).unwrap_or_default().to_string()
+        }
         Some(serde_json::Value::String(s)) => s.clone(),
         _ => String::new(),
     }
@@ -90,7 +92,16 @@ impl AsacIndex {
     fn from_index(index: Index, schema: Schema, fields: Fields) -> tantivy::Result<Self> {
         let writer = index.writer(50_000_000)?;
         let (title, url, body, links, fetched_at) = fields;
-        Ok(Self { index, schema, writer, title, url, body, links, fetched_at })
+        Ok(Self {
+            index,
+            schema,
+            writer,
+            title,
+            url,
+            body,
+            links,
+            fetched_at,
+        })
     }
 
     /// Create an in-memory index with the ASAC schema.
@@ -203,7 +214,10 @@ impl AsacReader {
         let mut hits = Vec::with_capacity(top.len());
         for (score, addr) in top {
             let doc: TantivyDocument = searcher.doc(addr)?;
-            hits.push(Hit { score, json: doc.to_json(&self.schema) });
+            hits.push(Hit {
+                score,
+                json: doc.to_json(&self.schema),
+            });
         }
         Ok(hits)
     }
@@ -244,22 +258,44 @@ mod tests {
     fn bm25_ranks_relevant_doc_first() {
         let mut idx = AsacIndex::new().unwrap();
         let f = ContentFilter::new(NoKnownIllegal);
-        idx.add(&f, "The Old Man and the Sea", "http://x/sea",
-                "He fished alone in the Gulf Stream chasing a great whale", "").unwrap();
-        idx.add(&f, "Rust Programming", "http://x/rust",
-                "a systems programming language focused on memory safety", "").unwrap();
+        idx.add(
+            &f,
+            "The Old Man and the Sea",
+            "http://x/sea",
+            "He fished alone in the Gulf Stream chasing a great whale",
+            "",
+        )
+        .unwrap();
+        idx.add(
+            &f,
+            "Rust Programming",
+            "http://x/rust",
+            "a systems programming language focused on memory safety",
+            "",
+        )
+        .unwrap();
         idx.commit().unwrap();
 
         let hits = idx.search("whale sea", 5).unwrap();
         assert!(!hits.is_empty(), "expected a hit");
-        assert!(hits[0].json.contains("Old Man"), "the sea document should rank first");
+        assert!(
+            hits[0].json.contains("Old Man"),
+            "the sea document should rank first"
+        );
     }
 
     #[test]
     fn search_docs_parses_stored_fields() {
         let mut idx = AsacIndex::new().unwrap();
         let f = ContentFilter::new(NoKnownIllegal);
-        idx.add(&f, "Rust Lang", "http://x/rust", "memory safety ownership", "http://x/a").unwrap();
+        idx.add(
+            &f,
+            "Rust Lang",
+            "http://x/rust",
+            "memory safety ownership",
+            "http://x/a",
+        )
+        .unwrap();
         idx.commit().unwrap();
 
         let hits = idx.search_docs("ownership", 5).unwrap();
@@ -271,7 +307,10 @@ mod tests {
     }
 
     fn temp_dir(tag: &str) -> std::path::PathBuf {
-        let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
         std::env::temp_dir().join(format!("asac-index-test-{tag}-{}-{nanos}", std::process::id()))
     }
 
@@ -281,12 +320,17 @@ mod tests {
         {
             let mut idx = AsacIndex::open_or_create(&dir).unwrap();
             let f = ContentFilter::new(NoKnownIllegal);
-            idx.add(&f, "Persisted", "http://x/p", "durable body text", "").unwrap();
+            idx.add(&f, "Persisted", "http://x/p", "durable body text", "")
+                .unwrap();
             idx.commit().unwrap();
         } // writer/index dropped, mimicking a restart
         let idx = AsacIndex::open_or_create(&dir).unwrap();
         let hits = idx.search_docs("durable", 5).unwrap();
-        assert_eq!(hits.len(), 1, "doc indexed in the previous session must still be there");
+        assert_eq!(
+            hits.len(),
+            1,
+            "doc indexed in the previous session must still be there"
+        );
         assert_eq!(hits[0].title, "Persisted");
         std::fs::remove_dir_all(&dir).ok();
     }
@@ -295,9 +339,11 @@ mod tests {
     fn re_adding_same_url_upserts_not_duplicates() {
         let mut idx = AsacIndex::new().unwrap();
         let f = ContentFilter::new(NoKnownIllegal);
-        idx.add(&f, "Old Title", "http://x/same", "alpha keyword", "").unwrap();
+        idx.add(&f, "Old Title", "http://x/same", "alpha keyword", "")
+            .unwrap();
         idx.commit().unwrap();
-        idx.add(&f, "New Title", "http://x/same", "alpha keyword refreshed", "").unwrap();
+        idx.add(&f, "New Title", "http://x/same", "alpha keyword refreshed", "")
+            .unwrap();
         idx.commit().unwrap();
 
         let hits = idx.search_docs("alpha", 10).unwrap();
@@ -309,7 +355,15 @@ mod tests {
     fn add_at_stores_fetched_at_for_freshness() {
         let mut idx = AsacIndex::new().unwrap();
         let f = ContentFilter::new(NoKnownIllegal);
-        idx.add_at(&f, "Dated", "http://x/dated", "freshness keyword body", "", 1_700_000_000).unwrap();
+        idx.add_at(
+            &f,
+            "Dated",
+            "http://x/dated",
+            "freshness keyword body",
+            "",
+            1_700_000_000,
+        )
+        .unwrap();
         idx.commit().unwrap();
         let hits = idx.search_docs("freshness", 5).unwrap();
         assert_eq!(hits.len(), 1);
@@ -332,9 +386,17 @@ mod tests {
     fn safety_filter_blocks_insert() {
         let mut idx = AsacIndex::new().unwrap();
         let f = ContentFilter::new(NoKnownIllegal).block_term("forbidden");
-        let verdict = idx.add(&f, "bad", "http://x/bad", "this page has forbidden content", "").unwrap();
-        assert!(matches!(verdict, Verdict::Block(_)), "filter must block the insert");
+        let verdict = idx
+            .add(&f, "bad", "http://x/bad", "this page has forbidden content", "")
+            .unwrap();
+        assert!(
+            matches!(verdict, Verdict::Block(_)),
+            "filter must block the insert"
+        );
         idx.commit().unwrap();
-        assert!(idx.search("forbidden", 5).unwrap().is_empty(), "blocked doc must not be indexed");
+        assert!(
+            idx.search("forbidden", 5).unwrap().is_empty(),
+            "blocked doc must not be indexed"
+        );
     }
 }

@@ -157,7 +157,11 @@ pub struct Params {
 impl Params {
     /// Generous defaults that make a batch of sqrt(n) queries succeed with very high probability.
     pub fn for_sqrt_n(s: usize) -> Self {
-        Self { primaries: 8 * s, backups_per_chunk: s, replacements_per_chunk: s }
+        Self {
+            primaries: 8 * s,
+            backups_per_chunk: s,
+            replacements_per_chunk: s,
+        }
     }
 }
 
@@ -170,7 +174,7 @@ struct Equation {
 
 #[derive(PartialEq, Eq)]
 struct Backup {
-    offsets: Vec<usize>,      // entry at the hole chunk is unused
+    offsets: Vec<usize>, // entry at the hole chunk is unused
     parity_without_hole: Vec<u8>,
     consumed: bool,
 }
@@ -188,7 +192,7 @@ struct Replacement {
 pub struct ClientState {
     sqrt_n: usize,
     equations: Vec<Equation>,
-    backups: Vec<Vec<Backup>>,       // backups[chunk] -> backups with their hole in `chunk`
+    backups: Vec<Vec<Backup>>, // backups[chunk] -> backups with their hole in `chunk`
     replacements: Vec<Vec<Replacement>>,
 }
 
@@ -201,7 +205,11 @@ pub fn preprocess(db: &SingleServerDb, params: Params, master_seed: u64) -> Clie
         .map(|k| {
             let offsets: Vec<usize> = (0..s).map(|c| offset(&key, k as u64, c, s)).collect();
             let indices: Vec<usize> = (0..s).map(|c| c * s + offsets[c]).collect();
-            Equation { offsets, parity: db.xor_at(&indices), consumed: false }
+            Equation {
+                offsets,
+                parity: db.xor_at(&indices),
+                consumed: false,
+            }
         })
         .collect();
 
@@ -210,11 +218,18 @@ pub fn preprocess(db: &SingleServerDb, params: Params, master_seed: u64) -> Clie
             (0..params.backups_per_chunk)
                 .map(|k| {
                     let eq_id = (1u64 << 63) | ((hole as u64) << 20) | k as u64;
-                    let offsets: Vec<usize> =
-                        (0..s).map(|c| if c == hole { 0 } else { offset(&key, eq_id, c, s) }).collect();
-                    let indices: Vec<usize> =
-                        (0..s).filter(|&c| c != hole).map(|c| c * s + offsets[c]).collect();
-                    Backup { offsets, parity_without_hole: db.xor_at(&indices), consumed: false }
+                    let offsets: Vec<usize> = (0..s)
+                        .map(|c| if c == hole { 0 } else { offset(&key, eq_id, c, s) })
+                        .collect();
+                    let indices: Vec<usize> = (0..s)
+                        .filter(|&c| c != hole)
+                        .map(|c| c * s + offsets[c])
+                        .collect();
+                    Backup {
+                        offsets,
+                        parity_without_hole: db.xor_at(&indices),
+                        consumed: false,
+                    }
                 })
                 .collect()
         })
@@ -224,12 +239,21 @@ pub fn preprocess(db: &SingleServerDb, params: Params, master_seed: u64) -> Clie
     let replacements = (0..s)
         .map(|c| {
             (0..params.replacements_per_chunk.min(s))
-                .map(|off| Replacement { index: c * s + off, value: db.rows[c * s + off].clone(), consumed: false })
+                .map(|off| Replacement {
+                    index: c * s + off,
+                    value: db.rows[c * s + off].clone(),
+                    consumed: false,
+                })
                 .collect()
         })
         .collect();
 
-    ClientState { sqrt_n: s, equations, backups, replacements }
+    ClientState {
+        sqrt_n: s,
+        equations,
+        backups,
+        replacements,
+    }
 }
 
 /// XOR `src` into `acc` (equal length).
@@ -284,7 +308,11 @@ pub fn preprocess_streaming(
     let mut replacements: Vec<Vec<Replacement>> = (0..s)
         .map(|c| {
             (0..keep)
-                .map(|off| Replacement { index: c * s + off, value: vec![0u8; width], consumed: false })
+                .map(|off| Replacement {
+                    index: c * s + off,
+                    value: vec![0u8; width],
+                    consumed: false,
+                })
                 .collect()
         })
         .collect();
@@ -319,7 +347,12 @@ pub fn preprocess_streaming(
     }
     assert_eq!(count, n, "stream must yield exactly n records");
 
-    ClientState { sqrt_n: s, equations, backups, replacements }
+    ClientState {
+        sqrt_n: s,
+        equations,
+        backups,
+        replacements,
+    }
 }
 
 /// Privately fetch record `i`: one server round-trip, then refresh the consumed hints. Panics only if the
@@ -349,8 +382,9 @@ pub fn query(state: &mut ClientState, i: usize, server: &Server) -> Vec<u8> {
     state.replacements[chunk][rpos].consumed = true;
 
     // 3. Ask the server for the equation with i swapped for the replacement (server sees one index per chunk).
-    let indices: Vec<usize> =
-        (0..s).map(|c| if c == chunk { r_index } else { c * s + offsets[c] }).collect();
+    let indices: Vec<usize> = (0..s)
+        .map(|c| if c == chunk { r_index } else { c * s + offsets[c] })
+        .collect();
     let y_prime = server.answer(&indices);
 
     // 4. Recover: X_i = parity XOR y' XOR X_r.
@@ -369,7 +403,11 @@ pub fn query(state: &mut ClientState, i: usize, server: &Server) -> Vec<u8> {
         state.backups[chunk][bpos].consumed = true;
         new_offsets[chunk] = off;
         let new_parity: Vec<u8> = base.iter().zip(&xi).map(|(&a, &b)| a ^ b).collect();
-        state.equations.push(Equation { offsets: new_offsets, parity: new_parity, consumed: false });
+        state.equations.push(Equation {
+            offsets: new_offsets,
+            parity: new_parity,
+            consumed: false,
+        });
     }
 
     xi
@@ -453,7 +491,10 @@ mod tests {
         let expected = trials as f64 / s as f64; // 1000 per bucket
         for (off, &c) in counts.iter().enumerate() {
             let c = c as f64;
-            assert!(c > expected * 0.75 && c < expected * 1.25, "offset {off}: {c} far from {expected}");
+            assert!(
+                c > expected * 0.75 && c < expected * 1.25,
+                "offset {off}: {c} far from {expected}"
+            );
         }
     }
 
@@ -493,7 +534,10 @@ mod tests {
         let seed = 123;
         let batch = preprocess(&SingleServerDb::from_records(&records), params, seed);
         let streamed = preprocess_streaming(16, width, params, seed, records.iter().cloned());
-        assert!(batch == streamed, "streaming must build byte-identical hints to the batch build");
+        assert!(
+            batch == streamed,
+            "streaming must build byte-identical hints to the batch build"
+        );
     }
 
     #[test]

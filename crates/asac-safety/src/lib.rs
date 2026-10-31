@@ -142,7 +142,10 @@ mod tests {
     #[test]
     fn keyword_blocklist_is_case_insensitive() {
         let f = ContentFilter::new(NoKnownIllegal).block_term("Forbidden");
-        assert!(matches!(f.check(U, b"x", "this is FORBIDDEN content"), Verdict::Block(_)));
+        assert!(matches!(
+            f.check(U, b"x", "this is FORBIDDEN content"),
+            Verdict::Block(_)
+        ));
         assert_eq!(f.check(U, b"x", "this is fine"), Verdict::Allow);
     }
 
@@ -159,8 +162,14 @@ mod tests {
     fn host_blocklist_takes_down_every_page_on_the_host() {
         let f = ContentFilter::new(NoKnownIllegal).block_host("BAD.onion");
         // case-insensitive, and applies to any path/port on that host
-        assert!(matches!(f.check("http://bad.onion/a", b"x", "clean"), Verdict::Block(_)));
-        assert!(matches!(f.check("http://bad.onion:8080/b?q=1", b"x", "clean"), Verdict::Block(_)));
+        assert!(matches!(
+            f.check("http://bad.onion/a", b"x", "clean"),
+            Verdict::Block(_)
+        ));
+        assert!(matches!(
+            f.check("http://bad.onion:8080/b?q=1", b"x", "clean"),
+            Verdict::Block(_)
+        ));
         assert_eq!(f.check("http://good.onion/a", b"x", "clean"), Verdict::Allow);
     }
 

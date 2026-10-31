@@ -59,7 +59,10 @@ fn main() -> std::io::Result<()> {
     sock.connect(&dest)?;
     eprintln!(
         "emit -> {dest} rate={rate} seed={seed}{}",
-        query.as_ref().map(|q| format!(" query={q:?}")).unwrap_or_default()
+        query
+            .as_ref()
+            .map(|q| format!(" query={q:?}"))
+            .unwrap_or_default()
     );
 
     let start = Instant::now();

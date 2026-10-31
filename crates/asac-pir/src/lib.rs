@@ -152,6 +152,9 @@ mod tests {
         let small = bytes(10);
         let large = bytes(100);
         // ~10x the records must mean ~10x the download (allow slack for key-length variation).
-        assert!(large >= small * 8, "download must grow ~linearly with N: {small} -> {large}");
+        assert!(
+            large >= small * 8,
+            "download must grow ~linearly with N: {small} -> {large}"
+        );
     }
 }

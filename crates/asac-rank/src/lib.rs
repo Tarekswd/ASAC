@@ -22,13 +22,19 @@ pub fn pagerank(pages: &[(String, Vec<String>)]) -> HashMap<String, f32> {
     if n == 0 {
         return HashMap::new();
     }
-    let index: HashMap<&str, usize> =
-        pages.iter().enumerate().map(|(i, (u, _))| (u.as_str(), i)).collect();
+    let index: HashMap<&str, usize> = pages
+        .iter()
+        .enumerate()
+        .map(|(i, (u, _))| (u.as_str(), i))
+        .collect();
     // Out-edges to known pages only, deduped (self-links dropped would need extra work; kept simple).
     let out: Vec<Vec<usize>> = pages
         .iter()
         .map(|(_, links)| {
-            let mut e: Vec<usize> = links.iter().filter_map(|l| index.get(l.as_str()).copied()).collect();
+            let mut e: Vec<usize> = links
+                .iter()
+                .filter_map(|l| index.get(l.as_str()).copied())
+                .collect();
             e.sort_unstable();
             e.dedup();
             e
@@ -56,7 +62,11 @@ pub fn pagerank(pages: &[(String, Vec<String>)]) -> HashMap<String, f32> {
         }
         rank = next;
     }
-    pages.iter().enumerate().map(|(i, (u, _))| (u.clone(), rank[i])).collect()
+    pages
+        .iter()
+        .enumerate()
+        .map(|(i, (u, _))| (u.clone(), rank[i]))
+        .collect()
 }
 
 /// Per-URL authority, normalized so the most-linked page is `1.0`.
@@ -75,7 +85,10 @@ impl Authority {
 
     /// An empty authority table (every page scores 0; blending is then a no-op).
     pub fn empty() -> Self {
-        Self { scores: HashMap::new(), max: 0.0 }
+        Self {
+            scores: HashMap::new(),
+            max: 0.0,
+        }
     }
 
     /// Authority of `url` normalized to `0..=1` (0 if unknown or no links anywhere).
@@ -144,10 +157,22 @@ mod tests {
     #[test]
     fn freshness_decays_from_one_toward_floor() {
         let hl = 86_400; // 1 day
-        assert!((freshness_factor(0, hl, 0.2) - 1.0).abs() < 1e-6, "just-fetched = 1.0");
-        assert!((freshness_factor(hl, hl, 0.2) - (0.2 + 0.8 * 0.5)).abs() < 1e-6, "one half-life");
-        assert!(freshness_factor(100 * hl, hl, 0.2) < 0.21, "very old approaches the floor");
-        assert!(freshness_factor(hl, hl, 0.2) > freshness_factor(3 * hl, hl, 0.2), "fresher ranks higher");
+        assert!(
+            (freshness_factor(0, hl, 0.2) - 1.0).abs() < 1e-6,
+            "just-fetched = 1.0"
+        );
+        assert!(
+            (freshness_factor(hl, hl, 0.2) - (0.2 + 0.8 * 0.5)).abs() < 1e-6,
+            "one half-life"
+        );
+        assert!(
+            freshness_factor(100 * hl, hl, 0.2) < 0.21,
+            "very old approaches the floor"
+        );
+        assert!(
+            freshness_factor(hl, hl, 0.2) > freshness_factor(3 * hl, hl, 0.2),
+            "fresher ranks higher"
+        );
         assert_eq!(freshness_factor(999, 0, 0.2), 1.0, "half_life 0 disables decay");
     }
 

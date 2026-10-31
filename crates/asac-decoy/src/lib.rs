@@ -20,7 +20,9 @@ impl DecoyRng {
     /// Seed the CSPRNG from a `u64`.
     pub fn new(seed: u64) -> Self {
         use rand_core::SeedableRng;
-        Self { inner: rand_chacha::ChaCha20Rng::seed_from_u64(seed) }
+        Self {
+            inner: rand_chacha::ChaCha20Rng::seed_from_u64(seed),
+        }
     }
 
     fn next_u64(&mut self) -> u64 {

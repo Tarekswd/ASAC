@@ -83,7 +83,13 @@ impl ShardedDb {
             s += 1;
         }
 
-        Self { shards: dbs, hints, perms, shard_size, total }
+        Self {
+            shards: dbs,
+            hints,
+            perms,
+            shard_size,
+            total,
+        }
     }
 
     /// Number of logical records.
@@ -105,7 +111,12 @@ impl ShardedDb {
         let shard = i / self.shard_size;
         let local = i % self.shard_size;
         let server = Server::new(&self.shards[shard]);
-        Some(logical_query(&mut self.hints[shard], &self.perms[shard], local, &server))
+        Some(logical_query(
+            &mut self.hints[shard],
+            &self.perms[shard],
+            local,
+            &server,
+        ))
     }
 }
 
@@ -130,7 +141,11 @@ mod tests {
         assert_eq!(db.len(), 40);
         for &i in &[0usize, 7, 15, 23, 39] {
             let got = db.get(i).expect("in range");
-            assert_eq!(&got[..8], &(i as u64).to_le_bytes(), "record {i} must round-trip from its shard");
+            assert_eq!(
+                &got[..8],
+                &(i as u64).to_le_bytes(),
+                "record {i} must round-trip from its shard"
+            );
         }
         assert!(db.get(40).is_none(), "out of range");
     }
