@@ -14,7 +14,12 @@ network and a global observer of the links (FLAGSHIP-DESIGN.md §7, EXTERNAL-PLA
    searching or idle (a stronger, network-level restatement of the in-repo scheduler test).
 
 ## Prerequisites (the external parts)
-- [Shadow](https://shadow.github.io) installed (Linux).
+- [Shadow](https://shadow.github.io) installed. Shadow is **build-from-source only** (no prebuilt binary) and
+  officially supports **bare-metal/VM Ubuntu 22.04/24.04, Debian 12/13, Fedora 42** (kernel >= 5.15); building
+  needs `sudo apt` for its dev dependencies, and running needs a large `/dev/shm` with seccomp unconfined
+  [verified: shadow.github.io install + supported_platforms, 2026-10-31]. **WSL2 is not an officially supported
+  platform** — use a real Linux host, a VM, or a Docker container (`--shm-size=... --security-opt
+  seccomp=unconfined`). (This is why the harness has not been run in this repo's dev environment.)
 - An **emitter binary** `asac-emit` (to be written, ~a few lines): runs a `asac_client::DecoyClient`, framing
   each tick with `asac_mix::frame`, and sends it through a `MixTransport`. For an isolated measurement a
   loopback/socket transport to the observer is enough; for the full path, the Nym transport (EXTERNAL-PLAN
