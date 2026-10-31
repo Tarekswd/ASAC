@@ -123,7 +123,7 @@ impl Fetcher for TorFetcher {
         let parsed = Url::parse(url).map_err(|e| FetchError::Network(format!("bad url {url}: {e}")))?;
         self.rt
             .block_on(Self::get(&self.client, &self.tls, &self.user_agent, &parsed))
-            .map_err(|e| FetchError::Network(e.to_string()))
+            .map_err(|e| FetchError::Network(format!("{e:#}")))
     }
 }
 
@@ -140,7 +140,15 @@ Accept: text/html\r\nAccept-Encoding: gzip, deflate\r\nConnection: close\r\n\r\n
     stream.write_all(req.as_bytes()).await.context("send request")?;
     stream.flush().await.context("flush request")?; // Arti buffers a partial cell until flush.
     let mut buf = Vec::new();
-    stream.read_to_end(&mut buf).await.context("read response")?;
+    // A Tor stream can end with a non-DONE reason (e.g. an onion service's END cell with reason MISC) *after*
+    // delivering the whole response; read_to_end reports that as an error even though the body is already in
+    // `buf`. The server sends `Connection: close` + `Content-Length`, so bytes-received means the response
+    // arrived -- keep it rather than losing the page. Only a truly empty read is a real failure.
+    if let Err(e) = stream.read_to_end(&mut buf).await {
+        if buf.is_empty() {
+            return Err(e).context("read response");
+        }
+    }
     Ok(buf)
 }
 

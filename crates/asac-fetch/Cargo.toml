@@ -10,8 +10,9 @@ description = "Live Fetcher backend for asac-crawler: HTTP over Tor via arti-cli
 
 [dependencies]
 asac-crawler = { path = "../asac-crawler" }
-# Mirror potato's exact Arti feature set (rustls, no system OpenSSL/sqlite). See crates/potato/Cargo.toml.
-arti-client = { version = "=0.47.0", default-features = false, features = ["tokio", "rustls", "compression", "static-sqlite"] }
+# Potato's Arti feature set (rustls, no system OpenSSL/sqlite) PLUS onion-service-client: without it
+# arti-client can't *connect to* .onion services, so crawling an onion URL fails (A1). See crates/potato/Cargo.toml.
+arti-client = { version = "=0.47.0", default-features = false, features = ["tokio", "rustls", "compression", "static-sqlite", "onion-service-client"] }
 tor-rtcompat = { version = "=0.47.0", features = ["tokio", "rustls"] }
 tokio = { version = "1", features = ["rt-multi-thread", "io-util"] }
 # TLS over the Tor stream for https: ring provider (pure-Rust; avoids tokio-rustls' default aws-lc-rs C lib).

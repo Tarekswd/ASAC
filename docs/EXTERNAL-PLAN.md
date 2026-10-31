@@ -15,14 +15,14 @@ Ordered roughly by dependency and by how much it unblocks.
   client open `http://<onion>/search?q=...`; confirm a rendezvous connects and the results page renders. Then
   repeat with `--features pow` and `ASAC_RECRAWL_SECS` set.
 - **Depends on:** nothing new (code is done).
-- **Status (partial):** the **serving** half is observed — `asac-server` bootstraps Tor and publishes a v3
-  onion (two instances run side by side, each with its own `.onion` and index). The **client-fetch** half is
-  NOT confirmed: an automated second arti client (a `beta` server crawling `alpha`'s `/search` over Tor)
-  returned "crawled 0 page(s)" on every attempt, including a run with 300s descriptor propagation and three
-  retries against a persistent onion. Cause is undetermined — either the onion isn't reachable from a freshly
-  cold-bootstrapped client within the crawler's per-request timeout, or `asac-fetch`/`asac-crawler` doesn't
-  fetch `.onion` URLs correctly (needs investigation). Confirm the end-to-end path with **Tor Browser** against
-  the printed `.onion` on a long-lived `asac-server`; that is the reliable client the step was written for.
+- **Status: DONE (observed end to end).** `asac-server` publishes a v3 onion, and a second arti client (a
+  `beta` server crawling `alpha`'s `/search` over Tor) fetches the rendered results page — "crawled 1 page(s)"
+  with the server serving cleanly. Getting there fixed three real bugs the automated test surfaced: (1)
+  `asac-fetch` never enabled arti's `onion-service-client`, so it could not dial a `.onion` at all; (2) the
+  crawler/fetcher swallowed transport errors (now logged, with the full anyhow cause); (3) an onion-service
+  stream ends with a non-DONE (MISC) reason *after* delivering the body, and the fetcher was discarding the
+  already-received response — it now keeps it. Tor Browser against the printed `.onion` is still the nicest
+  manual confirmation, but the arti-to-arti path is verified.
 - **Clears:** the "live serving" half of PLAN Phase 4 — turns `asac-server`/`asac-fetch` from "compiles +
   response-parsing tested" into "observed working end to end."
 

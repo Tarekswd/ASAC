@@ -212,6 +212,9 @@ where
     let html = handle(reader, &target, MAX_RESULTS, authority).map_err(|_| anyhow!("search failed"))?;
     stream.write_all(http_response(&html).as_bytes()).await?;
     stream.flush().await?; // Arti buffers a partial cell until flush.
+    // Graceful close (flush + end the stream) rather than an abrupt drop. An Arti onion-service stream may
+    // still END with a non-DONE reason on the client side regardless, so the fetcher tolerates that (asac-fetch).
+    stream.close().await?;
     Ok(())
 }
 

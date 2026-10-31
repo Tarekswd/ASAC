@@ -147,7 +147,10 @@ pub fn crawl<F: Fetcher>(fetcher: &F, seeds: &[&str], cfg: &CrawlConfig) -> Vec<
         }
         let page = match fetcher.fetch(url.as_str()) {
             Ok(p) => p,
-            Err(_) => continue,
+            Err(e) => {
+                eprintln!("fetch failed for {url}: {e:?}"); // surface transport failures instead of dropping silently
+                continue;
+            }
         };
         if page.status / 100 != 2 || !page.content_type.to_ascii_lowercase().contains("html") {
             continue; // HTML only; never follow or index non-HTML (media, etc.)
