@@ -1,16 +1,23 @@
-# F5 network-level anonymity harness (TEMPLATE — schema-grounded, NOT run; see README.md).
-# Shadow config spec: https://shadow.github.io/docs/guide/shadow_config_spec.html
+# F5 network-level anonymity harness (see README.md). N client hosts emit the asac-client Poisson cover
+# stream to an observer; exactly one (searcher) also mixes in a real query. The observer logs per-packet
+# arrival time + source; analyze.py then checks whether the searcher can be found better than chance (1/N).
 #
-# N clients emit the asac-client Poisson cover stream; exactly one is the real searcher. An observer records
-# per-link timings; the analysis script then checks whether the observer can beat chance (1/N) at finding the
-# searcher. Replace the placeholder `asac-emit`/`asac-observe` paths with the built binaries (see README).
+# Run from this directory with the built binaries beside it (see README "Run"):
+#   cargo build -p asac-emit -p asac-observe
+#   cp ../../target/debug/asac-emit ../../target/debug/asac-observe .
+#   shadow mix-anonymity.yaml && python3 analyze.py shadow.data/hosts/observer/timings.csv --searcher-ip 11.0.0.7
+#
+# Each emitter gets a distinct --seed so the schedules are independent; the searcher differs ONLY by carrying
+# a real --query (which, by design, does not change its send timing). All processes run until stop_time, so
+# each declares expected_final_state: running (Shadow kills them at the end; that is not an error).
+# IPs are auto-assigned alphabetically from 11.0.0.1: client1..5 = .1..5, observer = .6, searcher = .7.
 
 general:
-  stop_time: 10 min
+  stop_time: 2 min
 
 network:
   graph:
-    # Single switch; tune latency/bandwidth to model the Tor+mix path.
+    # Single switch; latency/bandwidth model the Tor+mix path.
     type: gml
     inline: |
       graph [
@@ -28,30 +35,55 @@ network:
       ]
 
 hosts:
-  # Collects per-host send timings (pcap or its own log) for the analysis script.
   observer:
     network_node_id: 0
     processes:
-      - path: ./asac-observe          # placeholder: build this (see README)
+      - path: ./asac-observe
         args: --listen --out timings.csv
         start_time: 1s
+        expected_final_state: running
 
-  # Shared client profile; one real searcher, the rest cover-only. Add more `clientK: *client` for larger N.
-  client1: &client
+  client1:
     network_node_id: 0
     processes:
-      - path: ./asac-emit             # placeholder: wraps asac_client::DecoyClient + asac_mix::frame
-        args: --rate 2 --observer observer --terms terms.txt
+      - path: ./asac-emit
+        args: --observer observer --rate 2 --seed 11
         start_time: 5s
-  client2: *client
-  client3: *client
-  client4: *client
-  client5: *client
+        expected_final_state: running
+  client2:
+    network_node_id: 0
+    processes:
+      - path: ./asac-emit
+        args: --observer observer --rate 2 --seed 12
+        start_time: 5s
+        expected_final_state: running
+  client3:
+    network_node_id: 0
+    processes:
+      - path: ./asac-emit
+        args: --observer observer --rate 2 --seed 13
+        start_time: 5s
+        expected_final_state: running
+  client4:
+    network_node_id: 0
+    processes:
+      - path: ./asac-emit
+        args: --observer observer --rate 2 --seed 14
+        start_time: 5s
+        expected_final_state: running
+  client5:
+    network_node_id: 0
+    processes:
+      - path: ./asac-emit
+        args: --observer observer --rate 2 --seed 15
+        start_time: 5s
+        expected_final_state: running
 
-  # The one actually searching (same cover stream, plus a real query mixed in).
+  # The one actually searching: same cover stream, plus a real query mixed in.
   searcher:
     network_node_id: 0
     processes:
       - path: ./asac-emit
-        args: --rate 2 --observer observer --terms terms.txt --query "the real search"
+        args: --observer observer --rate 2 --seed 20 --query "the real search"
         start_time: 5s
+        expected_final_state: running

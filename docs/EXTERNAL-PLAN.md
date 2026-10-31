@@ -21,24 +21,30 @@ Ordered roughly by dependency and by how much it unblocks.
 ## 2. F5 — network-level Shadow simulation
 - **Needs:** [Shadow](https://shadow.github.io) installed, plus a mix-transport stub (item 3) to measure the
   full path (the scheduler-level anonymity is already measured in-process — `asac_mix::timing_observer_accuracy`).
-- **Scaffold in-repo:** `sim/shadow/` holds the harness spec (`README.md`) and a schema-grounded config
-  template (`mix-anonymity.yaml`) — N clients emitting the `asac-client` cover stream, one real searcher, an
-  observer. Not run here (needs Shadow + a built emitter).
-- **Steps:** build the `asac-emit`/`asac-observe` binaries the template references; run `shadow
-  sim/shadow/mix-anonymity.yaml`; compute the observer's identification accuracy (target ~1/N) and the
-  wall-clock timing-independence test from FLAGSHIP-DESIGN.md §7; compare to documented targets.
-- **Depends on:** item 3 (something to route through); `asac-mix` (done).
+- **Built + run in-repo:** `sim/shadow/` now has the `asac-emit` + `asac-observe` binaries, the `analyze.py`
+  adversary, and a working `mix-anonymity.yaml` (6 emitters, one searcher). The sim runs end-to-end under
+  Shadow: the observer collects the per-host send timings and the searcher's inter-send distribution is
+  indistinguishable from the cover-only clients (all mean-gap ≈ 1/rate), so the timing adversary is at chance
+  (it misidentified the searcher on the sample run). This is **one trial** — a full accuracy figure needs many
+  runs with the searcher placed on different hosts.
+- **Steps (remaining):** script many runs (vary which host searches) to turn the single-trial result into an
+  accuracy estimate vs. the 1/N target; also run the wall-clock timing-independence test (FLAGSHIP-DESIGN.md
+  §7). For the *full-path* measurement, route through the Nym transport (item 3) rather than the loopback UDP.
+- **Depends on:** item 3 for the full path; the scheduler-level harness is done.
 - **Clears:** the metadata-unobservability measurement — the evidence half of the flagship claim.
 
 ## 3. F4-live — mix transport (Nym backend)
 - **Decision: made — ride Nym** (deployed Rust Sphinx mixnet), not our own mixes: we never roll crypto and
   Sphinx is per-hop public-key crypto, and a real anonymity set needs a crowd (FLAGSHIP-DESIGN.md §5/§10).
-- **Done in-repo:** the `asac_mix::MixTransport` seam and fixed-size packet framing (`frame`/`next_packet`),
-  so real and cover packets are identical on the wire (tested). The scheduler already feeds it.
-- **Needs (external):** the `nym-sdk` crate and a live network to test against.
-- **Steps:** add `nym-sdk`; implement `MixTransport::send` by submitting each framed packet as a Nym Sphinx
-  packet to a gateway; run the live send loop (sleep the scheduler delay, then send); validate in Shadow
-  (item 2) or against the live Nym testnet.
+- **Done in-repo:** the `asac_mix::MixTransport` seam + fixed-size framing (tested), AND the Nym backend itself
+  — `crates/asac-mix-nym` implements `MixTransport::send` via `nym-sdk` (`send_message`). It builds and its
+  offline test passes on the **stable** toolchain; it is an **excluded** crate (own lockfile) and documents the
+  four upstream nym packaging workarounds in its `Cargo.toml` (blake3 pin, rustc floor, git tag, vendored yanked
+  `tokio_with_wasm`). See the filed/pending nym issue about the yanked dep.
+- **Needs (external):** a reachable Nym gateway to run the live send against.
+- **Steps (remaining):** wire the scheduler's send loop to a `NymTransport` (sleep the delay, then `send`); run
+  the `#[ignore]`d `live_send` test against a gateway (`NYM_TEST_RECIPIENT`) to confirm packets traverse the
+  mixnet; validate alongside Shadow (item 2).
 - **Depends on:** `asac-mix` seam (done); the Nym network.
 - **Clears:** the actual metadata-privacy transport (today only the local send schedule + framing exist).
 
@@ -85,13 +91,11 @@ Ordered roughly by dependency and by how much it unblocks.
 - **Depends on:** everything above being stable.
 - **Clears:** PLAN Phase 5 gate (ship readiness).
 
-## 9. Publish the repository
-- **Needs:** an interactive terminal with push credentials (this environment's non-interactive shell cannot
-  authenticate to GitHub).
-- **Steps:** `git push origin main` from an interactive terminal; tag; set up CI to run `cargo test --workspace`
-  and `cargo clippy --all-targets -- -D warnings` on every push (the gate this project already holds to locally).
-- **Depends on:** nothing.
-- **Clears:** the local-only state (all work to date is committed but unpushed).
+## 9. Publish the repository — DONE
+- **Done:** pushed to `github.com/Tarekswd/ASAC` (public), renamed from `potarek` to `asac`. CI is in place
+  (`.github/workflows/ci.yml`): `cargo fmt --check`, `cargo clippy --workspace --all-targets` with
+  `-D warnings`, and `cargo test --workspace` on Rust 1.92 for every push/PR.
+- **Remaining (minor):** rename the local working folder to `asac` (cosmetic), and tag a release when ready.
 
 ---
 

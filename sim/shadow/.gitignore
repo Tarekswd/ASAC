@@ -1,0 +1,5 @@
+# F5 run artifacts — build outputs copied here + Shadow output. Not source; do not commit.
+asac-emit
+asac-observe
+shadow.data/
+*.log

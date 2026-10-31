@@ -112,9 +112,11 @@ Full detail and status in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 |-------|------------|
 | `asac-pir` | PIR (trivial, 2-server XOR, single-server PIANO) + sharding, so the server can't learn the query. |
 | `asac-search` | Private search: PIR-by-keyword + a private corpus over the real index. |
-| `asac-mix` | Loopix-style Poisson cover-traffic send scheduler. |
+| `asac-mix` | Loopix-style Poisson cover-traffic send scheduler + the `MixTransport` seam. |
+| `asac-mix-nym` | Live Nym (Sphinx mixnet) backend for `MixTransport`. Excluded crate, builds on stable; see its Cargo.toml. |
 | `asac-decoy` | Client-side decoy-query generator (vetted term list). |
 | `asac-client` | Client query stream: real searches interleaved with decoys, Poisson-paced. |
+| `asac-emit` / `asac-observe` | F5 measurement harness: emit the cover stream / record per-host send timings (`sim/shadow`). |
 
 ## Contributing
 

@@ -201,6 +201,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "asac-emit"
+version = "0.0.0"
+dependencies = [
+ "asac-client",
+ "asac-mix",
+]
+
+[[package]]
 name = "asac-fetch"
 version = "0.0.0"
 dependencies = [
@@ -233,6 +241,10 @@ dependencies = [
 
 [[package]]
 name = "asac-mix"
+version = "0.0.0"
+
+[[package]]
+name = "asac-observe"
 version = "0.0.0"
 
 [[package]]

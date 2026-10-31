@@ -1,0 +1,13 @@
+[package]
+name = "asac-emit"
+version = "0.0.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish = false
+description = "F5 harness: one client host's emitter. Sends the asac-client Poisson cover stream to the observer; with --query it also mixes in a real search. Send timing is query-independent (asac-mix F4)."
+
+[dependencies]
+asac-client = { path = "../asac-client" }
+asac-mix = { path = "../asac-mix" }
