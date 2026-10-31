@@ -183,6 +183,10 @@ dependencies = [
 [[package]]
 name = "asac-decoy"
 version = "0.0.0"
+dependencies = [
+ "rand_chacha 0.10.0",
+ "rand_core 0.10.1",
+]
 
 [[package]]
 name = "asac-demo"

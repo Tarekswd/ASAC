@@ -8,28 +8,24 @@
 //! Hard rule from the plan: decoys are drawn ONLY from a vetted, benign term list supplied by the
 //! caller. This crate never invents terms, so it cannot emit a harmful or illegal search.
 
-/// A small, fast, deterministic PRNG (xorshift64*). Deterministic so decoy selection is testable
-/// and dependency-free.
-///
-/// shortcut: not a CSPRNG; upgrade if a threat model ever needs decoys an attacker cannot predict.
-/// Decoys only need to cover the term space, not be unpredictable, so this is sufficient today.
+/// A cryptographically secure PRNG (ChaCha20) for decoy selection. Unlike a fast non-crypto PRNG, observing
+/// decoy outputs does not reveal the generator state, so an adversary cannot predict future decoys and filter
+/// them out. Deterministic from the seed (so decoy selection is testable); in deployment, seed it from an
+/// unpredictable source (e.g. OS entropy) so the stream itself is unpredictable.
 pub struct DecoyRng {
-    state: u64,
+    inner: rand_chacha::ChaCha20Rng,
 }
 
 impl DecoyRng {
-    /// Seed the PRNG. The all-zero state is avoided, since xorshift cannot leave it.
+    /// Seed the CSPRNG from a `u64`.
     pub fn new(seed: u64) -> Self {
-        Self { state: seed | 1 }
+        use rand_core::SeedableRng;
+        Self { inner: rand_chacha::ChaCha20Rng::seed_from_u64(seed) }
     }
 
     fn next_u64(&mut self) -> u64 {
-        let mut x = self.state;
-        x ^= x >> 12;
-        x ^= x << 25;
-        x ^= x >> 27;
-        self.state = x;
-        x.wrapping_mul(0x2545_F491_4F6C_DD1D)
+        use rand_core::Rng;
+        self.inner.next_u64()
     }
 }
 

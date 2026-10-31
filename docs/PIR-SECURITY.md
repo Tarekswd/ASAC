@@ -82,8 +82,12 @@ default.
   not just the paper's scheme).
 - **O5 — Timing side channel.** A1 covers the logical view, not wall-clock. Measure timing independence from
   the term under Shadow (FLAGSHIP-DESIGN.md §7).
-- **O6 — PRNG.** `asac-mix`/`asac-decoy` use non-CSPRNGs for pacing/selection (documented); confirm that is
-  acceptable for the metadata layer or swap in a CSPRNG.
+- **O6 — PRNG. Resolved.** `asac-decoy` now uses a **ChaCha20 CSPRNG** (`rand_chacha`) for decoy selection, so
+  observing decoys does not reveal the generator state and an adversary cannot predict/filter future decoys;
+  deployment must seed it from an unpredictable source. `asac-mix` keeps a fast non-CSPRNG for delay *sampling*
+  on purpose: Loopix's resistance comes from the Poisson distribution and cover volume, which are public, not
+  from secret delays — so predictable delays do not reveal which sends were real. (Still confirm this
+  distribution argument in review.)
 
 Only once O1-O6 are resolved and an external cryptographer has reviewed this argument does any public
 "mathematically unable to profile you" claim become defensible.
