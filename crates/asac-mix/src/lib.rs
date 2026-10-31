@@ -71,6 +71,56 @@ impl PoissonScheduler {
     }
 }
 
+// ---------------------------------------------------------------------------
+// F4-live transport seam (FLAGSHIP-DESIGN.md Gap C / EXTERNAL-PLAN.md item 3).
+//
+// Decision: the live transport is Nym (a deployed Rust Sphinx mixnet), not our own mixes — we never roll
+// crypto (Sphinx is per-hop public-key crypto) and a real anonymity set needs a crowd. The Nym backend lives
+// behind `MixTransport`; it needs the network + nym-sdk, so it is not in-repo. What *is* here and testable:
+// the fixed-size framing that makes a real query and a cover message identical on the wire, and the glue that
+// turns a scheduler tick into a wire packet.
+
+/// Why a mixnet send failed. The Nym backend maps its errors onto this.
+#[derive(Debug)]
+pub struct MixError(pub String);
+
+/// The seam to a live mixnet. Implemented by the Nym backend (external); the scheduler feeds it fixed-size
+/// framed packets so the transport — and any network observer — cannot tell a real query from cover.
+pub trait MixTransport {
+    fn send(&self, packet: &[u8]) -> Result<(), MixError>;
+}
+
+/// Frame a payload into a fixed-`packet_size` packet: a 4-byte little-endian length, the payload, then zero
+/// padding. Every packet is the same size regardless of payload (cover frames an empty payload to the same
+/// size), so length reveals nothing. Returns `None` if the payload does not fit.
+pub fn frame(payload: &[u8], packet_size: usize) -> Option<Vec<u8>> {
+    if 4 + payload.len() > packet_size {
+        return None;
+    }
+    let mut pkt = Vec::with_capacity(packet_size);
+    pkt.extend_from_slice(&(payload.len() as u32).to_le_bytes());
+    pkt.extend_from_slice(payload);
+    pkt.resize(packet_size, 0);
+    Some(pkt)
+}
+
+/// Recover the payload from a framed packet (inverse of [`frame`]); `None` if malformed.
+pub fn unframe(packet: &[u8]) -> Option<Vec<u8>> {
+    let len = u32::from_le_bytes(packet.get(0..4)?.try_into().ok()?) as usize;
+    packet.get(4..4 + len).map(<[u8]>::to_vec)
+}
+
+/// Next scheduler tick as a wire packet: the delay to wait, and a fixed-size framed packet — the real queued
+/// message if any, else cover, indistinguishable by size. `None` if a real payload exceeds `packet_size`.
+pub fn next_packet(scheduler: &mut PoissonScheduler, packet_size: usize) -> Option<(f64, Vec<u8>)> {
+    let (delay, payload) = scheduler.next_send();
+    let bytes: &[u8] = match &payload {
+        Payload::Real(b) => b,
+        Payload::Cover => &[],
+    };
+    frame(bytes, packet_size).map(|pkt| (delay, pkt))
+}
+
 /// Measure the anonymity the scheduler provides against a **timing-only** observer (FLAGSHIP-DESIGN.md F5, at
 /// the scheduler level). Simulates `n_clients`, exactly one of which is actually searching (`real_messages`
 /// queued), each running its own rate-`rate` scheduler for `ticks` ticks. The observer sees only each client's
@@ -164,6 +214,48 @@ mod tests {
         for _ in 0..1000 {
             assert!(s.next_delay() > 0.0);
         }
+    }
+
+    #[test]
+    fn frame_roundtrips_and_is_fixed_size() {
+        let p = frame(b"private search", 64).unwrap();
+        assert_eq!(p.len(), 64);
+        assert_eq!(unframe(&p).unwrap(), b"private search");
+
+        // Cover (empty payload) frames to the same size as a real payload — no length side channel.
+        assert_eq!(frame(&[], 64).unwrap().len(), frame(b"anything", 64).unwrap().len());
+        assert_eq!(unframe(&frame(&[], 64).unwrap()).unwrap(), b"");
+
+        // Too big for the packet.
+        assert!(frame(&[0u8; 100], 64).is_none());
+    }
+
+    #[test]
+    fn every_wire_packet_is_the_same_size_real_or_cover() {
+        use std::cell::RefCell;
+
+        struct Fake {
+            lens: RefCell<Vec<usize>>,
+        }
+        impl MixTransport for Fake {
+            fn send(&self, packet: &[u8]) -> Result<(), MixError> {
+                self.lens.borrow_mut().push(packet.len());
+                Ok(())
+            }
+        }
+
+        let transport = Fake { lens: RefCell::new(Vec::new()) };
+        let mut sched = PoissonScheduler::new(2.0, 5);
+        sched.enqueue(b"the real query".to_vec());
+
+        // One real message then all cover; the observer sees a uniform stream of 128-byte packets.
+        for _ in 0..25 {
+            let (_delay, pkt) = next_packet(&mut sched, 128).unwrap();
+            transport.send(&pkt).unwrap();
+        }
+        let lens = transport.lens.borrow();
+        assert_eq!(lens.len(), 25);
+        assert!(lens.iter().all(|&l| l == 128), "real and cover packets must all be 128 bytes on the wire");
     }
 
     #[test]

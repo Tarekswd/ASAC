@@ -27,15 +27,17 @@ Ordered roughly by dependency and by how much it unblocks.
 - **Depends on:** item 3 (something to route through); `asac-mix` (done).
 - **Clears:** the metadata-unobservability measurement — the evidence half of the flagship claim.
 
-## 3. F4-live — mix transport + the own-mixes-vs-Nym decision
-- **Needs:** a routing layer (Sphinx packets + mix/provider protocol) **or** integration with an existing
-  deployed mixnet (e.g. Nym); a live network to test.
-- **Decision first (yours):** run our own mixes (full control, but too few mixes recreates the
-  small-anonymity-set risk, PLAN §8) vs ride Nym (a real anonymity set, less control). Decide before building.
-- **Steps:** per the decision, either implement Sphinx + routing and wire the `asac-mix` scheduler to it, or
-  integrate the Nym SDK as the transport behind the scheduler; then validate in Shadow (item 2).
-- **Depends on:** the decision; `asac-mix` (done).
-- **Clears:** the actual metadata-privacy transport (today only the local send schedule exists).
+## 3. F4-live — mix transport (Nym backend)
+- **Decision: made — ride Nym** (deployed Rust Sphinx mixnet), not our own mixes: we never roll crypto and
+  Sphinx is per-hop public-key crypto, and a real anonymity set needs a crowd (FLAGSHIP-DESIGN.md §5/§10).
+- **Done in-repo:** the `asac_mix::MixTransport` seam and fixed-size packet framing (`frame`/`next_packet`),
+  so real and cover packets are identical on the wire (tested). The scheduler already feeds it.
+- **Needs (external):** the `nym-sdk` crate and a live network to test against.
+- **Steps:** add `nym-sdk`; implement `MixTransport::send` by submitting each framed packet as a Nym Sphinx
+  packet to a gateway; run the live send loop (sleep the scheduler delay, then send); validate in Shadow
+  (item 2) or against the live Nym testnet.
+- **Depends on:** `asac-mix` seam (done); the Nym network.
+- **Clears:** the actual metadata-privacy transport (today only the local send schedule + framing exist).
 
 ## 4. F6 — external cryptographer review + published artifact
 - **Needs:** an applied cryptographer (PLAN §7 lists this role), then a PETS/PoPETs submission.

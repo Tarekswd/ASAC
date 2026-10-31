@@ -113,9 +113,12 @@ anonymity set we will *measure* (§7). **Honest cost:** added latency (the mixin
 traffic); it needs enough cover volume and an honest fraction of mix nodes. This is why it is confined to the
 latency-tolerant search path, never general browsing.
 
-**Build note.** This is a new crate, tentatively `asac-mix` (client-side cover-traffic + delay scheduler, and
-a mix/provider interface). Whether we run our own mixes or ride an existing deployment (e.g. Nym) is an open
-decision in §10 — running too few mixes ourselves recreates the small-anonymity-set risk (PLAN §8 risk 1).
+**Build note.** `asac-mix` holds the client-side cover-traffic + delay scheduler and the transport seam. The
+own-mixes-vs-Nym decision (§10) is **made: ride Nym** — a deployed Rust Sphinx mixnet [verified:
+github.com/nymtech, `sphinx` is their Rust Sphinx impl, `nym-sdk` on docs.rs]. Rationale: we never roll crypto
+and Sphinx is per-hop public-key crypto (principle 3), and a real anonymity set needs a crowd, not our own few
+mixes (principle 1 / PLAN §8 risk 1). The live Nym client lives behind `asac_mix::MixTransport`; the scheduler
+feeds it fixed-size framed packets (`frame`) so real and cover are identical on the wire.
 
 ## 6. Composition
 
@@ -180,10 +183,10 @@ Each is a normal, testable step like the ones already shipped; crates in parenth
   (`asac_pir::sharded::ShardedDb`): K independent PIANO shards, total budget sqrt(nK) > sqrt(n), with the
   shard-index leak documented (query all shards for full privacy). Still to do: width caps tuning and
   Shadow-scale cost on a large corpus.
-- **F4 — scheduler done.** `asac_mix::PoissonScheduler`: rate-λ Poisson send schedule with a real-message
-  queue; the delay schedule is independent of the queue (real vs cover is invisible to a timing observer),
-  tested. Remaining: the mix/provider wire protocol and live transport (Sphinx packets, routed loop messages,
-  provider storage) — and the own-mixes-vs-Nym decision (§10).
+- **F4 — scheduler + transport seam done; Nym backend pending.** `asac_mix::PoissonScheduler` (traffic-
+  independent delay schedule, tested) plus the `MixTransport` seam and fixed-size `frame`/`next_packet`, so
+  real and cover packets are identical on the wire (tested). Own-mixes-vs-Nym **decided: Nym**. Remaining
+  (external, needs the network + `nym-sdk`): implement `MixTransport` against Nym and run the live send loop.
 - **F5 — scheduler level done; network level pending.** Content side channels partly measured (§4 table:
   constant response size + server index count). Scheduler-level anonymity measured
   (`asac_mix::timing_observer_accuracy`): timing-only observer at chance = 1/N. Still to do in Shadow:
@@ -194,8 +197,9 @@ F1–F3 are solo-buildable here. F4–F5 are larger. F6 needs outside people.
 
 ## 10. Open questions / risks
 
-- **Own mixes vs existing network (Nym)?** Running too few mixes ourselves recreates the small-anonymity-set
-  risk (PLAN §8). Riding an existing deployment trades control for a real anonymity set. Decide before F4.
+- **Own mixes vs existing network (Nym)? — DECIDED: Nym.** Running too few mixes ourselves recreates the
+  small-anonymity-set risk (PLAN §8) and would mean rolling Sphinx crypto; riding Nym (deployed Rust Sphinx
+  mixnet) gives a real anonymity set and a vetted impl. Integration goes behind `asac_mix::MixTransport`.
 - **Vocabulary privacy.** Chor–Gilboa–Naor hides *which* term is looked up but the lookup structure's size and
   the universe of terms may still leak; quantify and decide what is acceptable.
 - **Symmetric (PIANO) vs LWE (Tiptoe/SimplePIR).** We chose PIANO for a solo dev (symmetric-only, no lattice
