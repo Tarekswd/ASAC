@@ -100,3 +100,67 @@ Item **1** (live validation) and item **9** (push + CI) need nothing but access 
 Item **5** (legal + partner) is the true launch blocker and is purely external. The flagship's credibility
 runs through **3 → 2 → 4** (transport, then Shadow measurement, then cryptographer review); the code-side
 obligations from PIR-SECURITY.md can be done in parallel in this repo whenever you want to prioritize them.
+
+---
+
+## Who to contact (people, groups, channels)
+
+Real organizations and their **official public channels** (verified 2026-10-31 unless tagged otherwise). No
+personal emails are invented; use the listed public channels and the project's own contact forms. Approach
+openly — explain ASAC's goal and its honest limits, and share PLAN.md / PIR-SECURITY.md.
+
+### Cryptographer review of the PIR work (items 4 / F6; obligations O1, O3, O4, O5)
+- **PETS / PoPETs** — the premier privacy-tech venue, open-access journal with four submission deadlines a
+  year and an artifact-review track [verified: petsymposium.org, cfp26]. Submit the write-up there for formal
+  peer review; use **HotPETs** for the early-stage idea [verified: cfp26]. Artifact questions:
+  `artifact26@petsymposium.org` [verified: cfp26].
+- **Applied-crypto / PIR academics** — PoPETs program-committee members working in this exact area are the
+  natural reviewers/collaborators to approach via their university pages, e.g. **Dimitrios Papadopoulos**
+  (HKUST) and **Melek Önen** (EURECOM) [verified: cfp27 PC list]. The **Tiptoe** authors at **MIT CSAIL**
+  (private web search over PIR) are the closest prior-art group [verified: eprint 2023/1438, earlier].
+- **Tor research community** — PETS infrastructure chairs include **Roger Dingledine** (Tor Project) and
+  **Ian Goldberg** (U. Waterloo) [verified: cfp26]; the Tor research list / forum (below) reaches this crowd.
+
+### Mixnet transport — Nym (item 3)
+- **Nym** — deployed Rust Sphinx mixnet; engage via **github.com/nymtech** (the `nym-sdk` and `sphinx` repos)
+  and their community channels linked there [verified: github.com/nymtech, earlier]. Start with an SDK-
+  integration issue/discussion for `MixTransport`.
+
+### Tor / Arti upstream (items 6, 7 — Potato Phases 2/3)
+- **tor-dev mailing list** `tor-dev@lists.torproject.org` — where Tor **proposals** (incl. prop 355, the PQ
+  handshake) are discussed [verified: github.com/torproject]. 
+- **Tor Forum** (forum.torproject.org) [verified: blog.torproject.org] and **GitLab** at
+  gitlab.torproject.org / gitlab.com/torproject [verified: gitlab.com/torproject].
+- Upstream the CGO/Conflux toggles and the PQ handshake here rather than forking (PLAN §3.9).
+
+### Content-safety hash-matching partner (item 5 — launch blocker)
+- **NCMEC** (US) — CyberTipline and hash-sharing initiatives for platforms [verified: technologycoalition.org].
+- **Microsoft PhotoDNA** — perceptual hashing offered to qualified organizations [verified: scribd/tech post;
+  microsoft.com/photodna].
+- **Thorn** — maintains 57M+ known-CSAM hashes with NCMEC updates [verified: thorn.org].
+- **IWF** (UK) — image/video hash feeds to members [verified: thehive.ai].
+- **Tech Coalition / Project Lantern** — cross-platform signal sharing among members [verified:
+  technologycoalition.org].
+- **Hive AI** — commercial CSAM-detection API bundling IWF hashes + classifiers, if a turnkey integration is
+  preferred [verified: thehive.ai]. Open perceptual-hash algorithms: **PDQ**, **pHash** [verified:
+  globalchildexploitationpolicy.org].
+- These wire into `asac_safety::HashMatchBackend`. Access requires eligibility/agreements — start the
+  conversation early; it gates launch.
+
+### Security audit (item 8 — Phase 5)
+- **Radically Open Security (ROS)** — non-profit, open-source-principled; **did the Tor Project's 2023 code
+  audit** [verified: blog.torproject.org].
+- **Cure53** — infrastructure/crypto audits since 2007; public contact on cure53.de [verified: cure53.de].
+
+### Funding (optional, to pay for audits/partners/time)
+- **NLnet / NGI Zero** — grants for open, privacy-friendly internet tech (NGI Zero Commons Fund, recurring open
+  calls; historically the NGI0 PET fund) [verified: nlnet.nl, ngi-0.eu]. The closest fit for ASAC.
+- **Open Technology Fund — Internet Freedom Fund** — has funded Tor and Signal [verified: opentech.fund,
+  Wikipedia]. **Caveat:** OTF's US government funding was disrupted by a March 2025 executive order affecting
+  USAGM, so its status may be uncertain — check before relying on it [verified: en.wikipedia.org/Open_Technology_Fund].
+
+### Legal review (item 5 — launch blocker)
+- Engage **digital-rights / internet-law counsel in your operating jurisdiction** before any public crawl; the
+  **Electronic Frontier Foundation (EFF)** is a well-known digital-rights organization to look to for pointers
+  {unverified: not checked this session — confirm current intake/scope}. This needs a real lawyer, not a
+  reference list.
