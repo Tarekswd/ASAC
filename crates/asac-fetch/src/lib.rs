@@ -75,6 +75,11 @@ impl TorFetcher {
 /// Maximum HTTP redirects to follow before giving up.
 const MAX_REDIRECTS: usize = 5;
 
+/// Cap on an untrusted response body (8 MiB). The body comes from an arbitrary server (any `.onion` or
+/// clear-web host), so bound the read to avoid an unbounded-stream memory DoS on the crawler. Generous for
+/// the HTML results pages ASAC fetches.
+const MAX_RESPONSE: u64 = 8 * 1024 * 1024;
+
 /// One request/response over Tor (plain or TLS), returning the raw response bytes.
 async fn fetch_once(
     client: &TorClient<PreferredRuntime>,
@@ -155,7 +160,8 @@ Accept: text/html\r\nAccept-Encoding: gzip, deflate\r\nConnection: close\r\n\r\n
     // delivering the whole response; read_to_end reports that as an error even though the body is already in
     // `buf`. The server sends `Connection: close` + `Content-Length`, so bytes-received means the response
     // arrived -- keep it rather than losing the page. Only a truly empty read is a real failure.
-    if let Err(e) = stream.read_to_end(&mut buf).await {
+    // `.take(MAX_RESPONSE)` bounds an untrusted/compromised server that would otherwise stream forever.
+    if let Err(e) = stream.take(MAX_RESPONSE).read_to_end(&mut buf).await {
         if buf.is_empty() {
             return Err(e).context("read response");
         }
@@ -285,6 +291,44 @@ mod tests {
         assert_eq!(p.status, 200);
         assert!(p.content_type.contains("text/html"));
         assert_eq!(p.body, "<html>hi</html>");
+    }
+
+    // Adversarial robustness: responses come from untrusted servers (any .onion/clear-web host), so malformed
+    // or hostile bytes must return best-effort, never panic or over-read.
+    #[test]
+    fn parse_response_tolerates_hostile_input_without_panicking() {
+        let cases: &[&[u8]] = &[
+            b"",
+            b"\r\n\r\n",
+            b"not http at all",
+            b"HTTP/1.1\r\n",
+            b"HTTP/1.1 200 OK\r\nContent-Length: 999999999\r\n\r\nshort",
+            b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\nzz\r\nbad",
+            b"HTTP/1.1 200 OK\r\nContent-Encoding: gzip\r\n\r\nnot-actually-gzip",
+            &[0xff, 0xfe, 0x00, 0x01, 0x80],
+        ];
+        for raw in cases {
+            let _ = parse_response(raw); // must return, never panic
+        }
+    }
+
+    #[test]
+    fn dechunk_tolerates_malformed_input_without_over_reading() {
+        let cases: &[&[u8]] = &[
+            b"",
+            b"\r\n",
+            b"zz\r\nabc",                 // non-hex size
+            b"ffffffffffffffff\r\nshort", // claimed size dwarfs the data: must not over-read
+            b"5\r\nhi",                   // truncated chunk
+            b"3\r\nabcno-trailer",
+        ];
+        for raw in cases {
+            let out = dechunk(raw); // best-effort, never panic
+            assert!(
+                out.len() <= raw.len(),
+                "dechunk must never produce more bytes than it was given"
+            );
+        }
     }
 
     #[test]

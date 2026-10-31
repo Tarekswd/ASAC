@@ -446,6 +446,47 @@ mod tests {
         }
     }
 
+    // Property-style: across many random databases and query batches (within the ~sqrt(n) budget), every PIR
+    // query must return exactly the stored record. Seeded splitmix64 so any failure reproduces; no extra deps.
+    #[test]
+    fn randomized_queries_roundtrip() {
+        let mut rng = 0x1234_5678_9abc_def0u64;
+        let mut next = || {
+            rng = rng.wrapping_add(0x9E37_79B9_7F4A_7C15);
+            let mut z = rng;
+            z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+            z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+            z ^ (z >> 31)
+        };
+        for _ in 0..40 {
+            let s = 2 + (next() % 7) as usize; // sqrt(n) in 2..=8
+            let n = s * s;
+            let width = 1 + (next() % 48) as usize;
+            let mut records: Vec<Vec<u8>> = Vec::with_capacity(n);
+            for _ in 0..n {
+                let mut rec = Vec::with_capacity(width);
+                for _ in 0..width {
+                    rec.push((next() & 0xff) as u8);
+                }
+                records.push(rec);
+            }
+            let db = SingleServerDb::from_records(&records);
+            let mut state = preprocess(&db, Params::for_sqrt_n(s), next());
+            let server = Server::new(&db);
+            // Distinct indices within the per-preprocessing budget (~sqrt(n) = s).
+            let mut picked = std::collections::HashSet::new();
+            while picked.len() < s {
+                picked.insert((next() % n as u64) as usize);
+            }
+            for i in picked {
+                let got = query(&mut state, i, &server);
+                let mut expect = records[i].clone();
+                expect.resize(got.len(), 0);
+                assert_eq!(got, expect, "n={n} width={width} index={i}");
+            }
+        }
+    }
+
     #[test]
     fn query_refreshes_an_equation_containing_i() {
         let db = db(16);

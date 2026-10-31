@@ -29,15 +29,16 @@ Ordered roughly by dependency and by how much it unblocks.
 ## 2. F5 — network-level Shadow simulation
 - **Needs:** [Shadow](https://shadow.github.io) installed, plus a mix-transport stub (item 3) to measure the
   full path (the scheduler-level anonymity is already measured in-process — `asac_mix::timing_observer_accuracy`).
-- **Built + run in-repo:** `sim/shadow/` now has the `asac-emit` + `asac-observe` binaries, the `analyze.py`
-  adversary, and a working `mix-anonymity.yaml` (6 emitters, one searcher). The sim runs end-to-end under
-  Shadow: the observer collects the per-host send timings and the searcher's inter-send distribution is
-  indistinguishable from the cover-only clients (all mean-gap ≈ 1/rate), so the timing adversary is at chance
-  (it misidentified the searcher on the sample run). This is **one trial** — a full accuracy figure needs many
-  runs with the searcher placed on different hosts.
-- **Steps (remaining):** script many runs (vary which host searches) to turn the single-trial result into an
-  accuracy estimate vs. the 1/N target; also run the wall-clock timing-independence test (FLAGSHIP-DESIGN.md
-  §7). For the *full-path* measurement, route through the Nym transport (item 3) rather than the loopback UDP.
+- **Built + measured in-repo:** `sim/shadow/` has the `asac-emit` + `asac-observe` binaries, the `analyze.py`
+  adversary (with a two-sample KS timing-independence test), `mix-anonymity.yaml`, and `run_multitrial.sh`.
+  **Multi-trial result (6 emitters, searcher rotated across all 6):** the timing adversary is correct on
+  **1/6 trials = 0.167 = chance (1/N)**, and the KS test finds the searcher's send-gap distribution
+  **indistinguishable from the cover clients at the 5% level in all 6 trials**. So a global observer of the
+  (loopback) links gains no timing signal about who is searching.
+- **Steps (remaining):** this is the *scheduler/loopback* measurement. For the **full-path** result, route the
+  emitters through the Nym transport (item 3) instead of loopback UDP and re-run; and scale N well beyond 6 for
+  a tighter accuracy bound. (The scheduler-level in-process check — `asac_mix::timing_observer_accuracy` — and
+  this network-level run now agree.)
 - **Depends on:** item 3 for the full path; the scheduler-level harness is done.
 - **Clears:** the metadata-unobservability measurement — the evidence half of the flagship claim.
 

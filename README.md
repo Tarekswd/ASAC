@@ -27,6 +27,24 @@ ASAC is two pieces that work together:
 
 See **[PLAN.md](PLAN.md)** for the full design, threat model, phased roadmap, and measurement plan.
 
+## What ASAC does not claim
+
+Being explicit about the limits (full threat model in [docs/THREAT-MODEL.md](docs/THREAT-MODEL.md)):
+
+- **Not audited; no proven privacy guarantee.** The query-privacy (PIR) design is implemented, tested, and
+  measured, and the argument is written down ([docs/PIR-SECURITY.md](docs/PIR-SECURITY.md) §6) — but it has
+  **not** had external cryptographic review. Obligations O4 (the PIANO implementation) and O5 (wall-clock
+  timing) are open. Until that review, treat query privacy as a *prototype mechanism*, not a theorem.
+- **Metadata privacy is designed and measured, not deployed.** The Loopix-style cover traffic is tested at
+  the scheduler level and exercised in a Shadow simulation; the live Nym transport builds but has not been run
+  against a production mixnet.
+- **It does not protect a compromised endpoint**, nor defend against browser/device fingerprinting — that is
+  the OS's and the browser's job.
+- **It does not "solve mass surveillance" for general browsing** — only the search path is hardened; general
+  traffic through the routing layer keeps Tor's own properties and limits, including the global-passive-adversary
+  limit.
+- **No new cryptography is claimed.** ASAC's novelty is *policy and composition* of audited primitives.
+
 ## Design principles
 
 These are load-bearing, not decoration (full detail in [PLAN.md](PLAN.md)):

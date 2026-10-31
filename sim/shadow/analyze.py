@@ -44,6 +44,29 @@ def per_host_gaps(rows):
     return by_ip, gaps
 
 
+def ks_two_sample(a, b):
+    """Two-sample Kolmogorov-Smirnov statistic D and the ~5%-significance critical value.
+
+    D is the max gap between the two empirical CDFs. If D <= crit, the two inter-send-gap samples are not
+    distinguishable at the 5% level -- i.e. the searcher's timing looks like the cover clients'. Stdlib only.
+    """
+    a, b = sorted(a), sorted(b)
+    na, nb = len(a), len(b)
+    if na == 0 or nb == 0:
+        return 0.0, 0.0
+    i = j = 0
+    d = 0.0
+    while i < na and j < nb:
+        x = min(a[i], b[j])
+        while i < na and a[i] == x:
+            i += 1
+        while j < nb and b[j] == x:
+            j += 1
+        d = max(d, abs(i / na - j / nb))
+    crit = 1.36 * ((na + nb) / (na * nb)) ** 0.5
+    return d, crit
+
+
 def main():
     args = sys.argv[1:]
     if not args:
@@ -79,6 +102,16 @@ def main():
     print(f"timing-adversary guess (max deviation from median mean-gap): {guess}")
     if searcher_ip:
         print(f"actual searcher: {searcher_ip}  -> guess {'CORRECT' if guess == searcher_ip else 'WRONG'} (one trial)")
+        # Timing-independence (FLAGSHIP-DESIGN.md §7, O5): the searcher's inter-send gaps should be
+        # distributionally indistinguishable from the cover clients'. KS-test the searcher against the pooled
+        # cover gaps.
+        if searcher_ip in gaps:
+            cover = [g for ip in hosts if ip != searcher_ip for g in gaps[ip]]
+            d, crit = ks_two_sample(gaps[searcher_ip], cover)
+            verdict = "indistinguishable at 5%" if d <= crit else "DISTINGUISHABLE -- investigate"
+            print(f"timing-independence KS: D={d:.3f} crit(5%)={crit:.3f} -> {verdict}")
+        else:
+            print(f"(no packets recorded from searcher {searcher_ip}; cannot run the KS test)")
     else:
         print("pass --searcher-ip <IP> to score the guess; many runs are needed for an accuracy estimate.")
 

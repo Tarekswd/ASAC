@@ -3,3 +3,4 @@ asac-emit
 asac-observe
 shadow.data/
 *.log
+mix.yaml
