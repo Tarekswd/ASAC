@@ -47,8 +47,9 @@ Two independent PIANO instances: one keyword table (§3.1), one keyed by documen
 posting list from the first, then fetches each listed document from the second.
 
 *Argument:* the operator sees two PIANO query streams, each leaking nothing about its index by **A1**; the
-instances are independent. **However, the *number* of document fetches equals the posting-list length** — a
-real leak; see §4 and obligation O2.
+instances are independent. Each `search` performs **exactly `fetches_per_query` document fetches** — a corpus
+constant `min(MAX, sqrt(n_docs))`, independent of the query (real results first, the rest dummy fetches that
+are discarded) — so the fetch *count* reveals nothing about a term's posting-list length (O2, closed in code).
 
 ### 3.3 Sharding (`asac-pir::sharded`)
 Splitting into K shards and querying only the owning shard reveals the shard index (coarse `log2 K` bits). For
@@ -60,7 +61,7 @@ default.
 | Observable | Leaks | Status |
 |---|---|---|
 | PIANO query (keyword or doc) | nothing about the index (under A1) | argued; constant size/shape **measured** |
-| Number of doc fetches per search | the posting-list length (coarse popularity of the term) | **open leak — O2** |
+| Number of doc fetches per search | nothing (fixed `min(MAX, sqrt(n_docs))`, query-independent) | **closed (O2)** |
 | Shard index (if single-shard queried) | coarse bucket of the record | documented; avoid via query-all-shards |
 | The public vocabulary / bucket count | the *universe* of searchable terms (not which one) | by design; quantify (O3) |
 | Bucket overflow (dropped entries) | availability only, not privacy | correctness, not a leak |
@@ -69,11 +70,12 @@ default.
 
 - **O1 — Formalize §3.1.** A written reduction: distinguishing the term from the operator's view ⇒ breaking
   PIANO (A1) or the PRF (A2). Make the hoisting of the public hash explicit.
-- **O2 — Close the doc-fetch-count leak (§3.2).** Pad each search to a fixed number `K` of document fetches
-  (dummy PIR queries for the shortfall) so the count is constant, or argue the leak acceptable. Note the
-  tension with PIANO's budget: each dummy consumes a query, so `K` must be bounded by the per-shard
-  replacement budget (`sqrt(n)`-scale), which is why this is a policy decision (fixed `K` results, sized to
-  the corpus/shards from A5) rather than an unconditional pad.
+- **O2 — Closed in code.** `PrivateCorpus::search` now performs exactly `fetches_per_query =
+  min(MAX_FETCHES_PER_QUERY, sqrt(n_docs))` document fetches every time (real results first, dummy fetches for
+  the remainder, discarded), with the dummies spread across the index by a rotating cursor. The count is a
+  corpus constant, independent of the query, and `K ≤ sqrt(n)` keeps it within the per-chunk PIANO budget.
+  Remaining for review: confirm the dummy indices carry no exploitable correlation, and that truncating a
+  posting list longer than `K` (a result cap) is acceptable.
 - **O3 — Quantify vocabulary leakage.** The term universe / bucket structure may leak more than "which term";
   bound it.
 - **O4 — Discharge PIANO's own deferred obligations** flagged in `single_server` (the in-repo implementation,

@@ -213,13 +213,18 @@ impl PrivateKeyword {
 /// One hit while building a corpus: (doc id, url, BM25 score).
 type ScoredHit = (u32, String, f32);
 
+/// Upper bound on documents fetched (and returned) per search; the actual count is `min(this, sqrt(n_docs))`.
+const MAX_FETCHES_PER_QUERY: usize = 10;
+
 /// A private corpus: term -> posting list -> document records, all retrieved via PIR.
 pub struct PrivateCorpus {
     keywords: PrivateKeyword,
     doc_perm: Permutation,
     doc_db: SingleServerDb,
     doc_hints: ClientState,
-    n_docs: usize, // padded, perfect square
+    n_docs: usize,            // padded, perfect square
+    fetches_per_query: usize, // constant # of doc fetches per search (see PIR-SECURITY.md O2)
+    cursor: usize,            // rotates dummy-fetch indices across searches to spread PIR budget
 }
 
 impl PrivateCorpus {
@@ -261,7 +266,10 @@ impl PrivateCorpus {
         );
 
         let keywords = PrivateKeyword::build(keyword_entries, seed.wrapping_add(2));
-        Self { keywords, doc_perm, doc_db, doc_hints, n_docs: n }
+        // Fetch a constant number of docs per search, bounded by the per-chunk budget (sqrt(n)): this count is
+        // a corpus constant, independent of the query, so it never reveals a term's posting-list length.
+        let fetches_per_query = MAX_FETCHES_PER_QUERY.min(s).max(1);
+        Self { keywords, doc_perm, doc_db, doc_hints, n_docs: n, fetches_per_query, cursor: 0 }
     }
 
     /// Build a private corpus from a real index over a public `vocab`: each term's top `per_term` hits become
@@ -321,20 +329,39 @@ impl PrivateCorpus {
         Ok(Self::build(&doc_records, &keyword_entries, doc_width, seed))
     }
 
-    /// Privately search `term`: fetch its posting list, then fetch each document record. Returns the records
-    /// (trailing NUL padding trimmed) in posting-list order. The server learns neither the term nor the docs.
+    /// Privately search `term`: fetch its posting list, then fetch document records. Returns up to
+    /// `fetches_per_query` records (trailing NUL padding trimmed), best-first. The server learns neither the
+    /// term nor the docs, and always sees exactly `fetches_per_query` doc fetches regardless of how many
+    /// results the term has (PIR-SECURITY.md O2) — real results first, the rest dummy fetches discarded.
     pub fn search(&mut self, term: &str) -> Vec<Vec<u8>> {
         let ids = self.keywords.lookup(term).unwrap_or_default();
-        let server = Server::new(&self.doc_db);
-        let mut out = Vec::with_capacity(ids.len());
-        for &id in &ids {
-            let id = id as usize;
-            if id >= self.n_docs {
-                continue; // stale/out-of-range posting entry
+        let k = self.fetches_per_query;
+
+        // Exactly k distinct logical indices: the real ids (capped at k, already ranked), padded with other
+        // distinct indices so the fetch count is constant.
+        let mut to_fetch: Vec<usize> =
+            ids.iter().take(k).map(|&i| i as usize).filter(|&i| i < self.n_docs).collect();
+        let real_count = to_fetch.len();
+        // Pad with distinct indices starting from a rotating cursor, so repeated searches spread their dummy
+        // fetches over the index space instead of hammering one chunk's PIR budget.
+        let mut step = 0usize;
+        while to_fetch.len() < k && step < self.n_docs {
+            let idx = (self.cursor + step) % self.n_docs;
+            if !to_fetch.contains(&idx) {
+                to_fetch.push(idx);
             }
+            step += 1;
+        }
+        self.cursor = (self.cursor + k) % self.n_docs;
+
+        let server = Server::new(&self.doc_db);
+        let mut out = Vec::with_capacity(real_count);
+        for (slot, &id) in to_fetch.iter().enumerate() {
             let rec = logical_query(&mut self.doc_hints, &self.doc_perm, id, &server);
-            let end = rec.iter().rposition(|&b| b != 0).map_or(0, |p| p + 1);
-            out.push(rec[..end].to_vec());
+            if slot < real_count {
+                let end = rec.iter().rposition(|&b| b != 0).map_or(0, |p| p + 1);
+                out.push(rec[..end].to_vec());
+            }
         }
         out
     }
@@ -420,8 +447,8 @@ mod tests {
 
     #[test]
     fn private_corpus_fetches_docs_for_a_secret_term() {
-        // 16 docs so both PIR budgets (keyword + doc) comfortably cover the lookups.
-        let docs: Vec<Vec<u8>> = (0..16).map(|i| format!("doc{i}:payload").into_bytes()).collect();
+        // 36 docs so the doc PIR budget covers three searches at the fixed per-query fetch count (O2 padding).
+        let docs: Vec<Vec<u8>> = (0..36).map(|i| format!("doc{i}:payload").into_bytes()).collect();
         let keyword_entries = vec![("alpha", vec![0u32, 5, 10]), ("beta", vec![1u32])];
         let mut corpus = PrivateCorpus::build(&docs, &keyword_entries, 64, 9);
 
