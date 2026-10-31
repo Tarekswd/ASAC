@@ -21,9 +21,12 @@ Ordered roughly by dependency and by how much it unblocks.
 ## 2. F5 — network-level Shadow simulation
 - **Needs:** [Shadow](https://shadow.github.io) installed, plus a mix-transport stub (item 3) to measure the
   full path (the scheduler-level anonymity is already measured in-process — `asac_mix::timing_observer_accuracy`).
-- **Steps:** write a Shadow `.yaml` with N client processes, the ASAC onion service, and a mix topology; drive
-  queries with the `asac-client` stream; have an "observer" process log link timings; compute the anonymity-set
-  entropy and the wall-clock timing-independence test from FLAGSHIP-DESIGN.md §7; compare to documented targets.
+- **Scaffold in-repo:** `sim/shadow/` holds the harness spec (`README.md`) and a schema-grounded config
+  template (`mix-anonymity.yaml`) — N clients emitting the `asac-client` cover stream, one real searcher, an
+  observer. Not run here (needs Shadow + a built emitter).
+- **Steps:** build the `asac-emit`/`asac-observe` binaries the template references; run `shadow
+  sim/shadow/mix-anonymity.yaml`; compute the observer's identification accuracy (target ~1/N) and the
+  wall-clock timing-independence test from FLAGSHIP-DESIGN.md §7; compare to documented targets.
 - **Depends on:** item 3 (something to route through); `asac-mix` (done).
 - **Clears:** the metadata-unobservability measurement — the evidence half of the flagship claim.
 

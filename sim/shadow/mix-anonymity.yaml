@@ -1,0 +1,57 @@
+# F5 network-level anonymity harness (TEMPLATE — schema-grounded, NOT run; see README.md).
+# Shadow config spec: https://shadow.github.io/docs/guide/shadow_config_spec.html
+#
+# N clients emit the asac-client Poisson cover stream; exactly one is the real searcher. An observer records
+# per-link timings; the analysis script then checks whether the observer can beat chance (1/N) at finding the
+# searcher. Replace the placeholder `asac-emit`/`asac-observe` paths with the built binaries (see README).
+
+general:
+  stop_time: 10 min
+
+network:
+  graph:
+    # Single switch; tune latency/bandwidth to model the Tor+mix path.
+    type: gml
+    inline: |
+      graph [
+        node [
+          id 0
+          host_bandwidth_down "100 Mbit"
+          host_bandwidth_up "100 Mbit"
+        ]
+        edge [
+          source 0
+          target 0
+          latency "150 ms"
+          packet_loss 0.0
+        ]
+      ]
+
+hosts:
+  # Collects per-host send timings (pcap or its own log) for the analysis script.
+  observer:
+    network_node_id: 0
+    processes:
+      - path: ./asac-observe          # placeholder: build this (see README)
+        args: --listen --out timings.csv
+        start_time: 1s
+
+  # Shared client profile; one real searcher, the rest cover-only. Add more `clientK: *client` for larger N.
+  client1: &client
+    network_node_id: 0
+    processes:
+      - path: ./asac-emit             # placeholder: wraps asac_client::DecoyClient + asac_mix::frame
+        args: --rate 2 --observer observer --terms terms.txt
+        start_time: 5s
+  client2: *client
+  client3: *client
+  client4: *client
+  client5: *client
+
+  # The one actually searching (same cover stream, plus a real query mixed in).
+  searcher:
+    network_node_id: 0
+    processes:
+      - path: ./asac-emit
+        args: --rate 2 --observer observer --terms terms.txt --query "the real search"
+        start_time: 5s
