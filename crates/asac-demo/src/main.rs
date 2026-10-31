@@ -30,7 +30,7 @@ fn main() -> anyhow::Result<()> {
     let query = &args[2];
 
     eprintln!("bootstrapping Tor (first run builds a circuit; this is slow)...");
-    let fetcher = TorFetcher::bootstrap("asac-crawler/0.0 (+https://github.com/Tarekswd/potarek)")?;
+    let fetcher = TorFetcher::bootstrap("asac-crawler/0.0 (+https://github.com/Tarekswd/asac)")?;
 
     eprintln!("crawling {seed} over Tor...");
     let cfg = CrawlConfig { max_pages: 20, ..CrawlConfig::default() };

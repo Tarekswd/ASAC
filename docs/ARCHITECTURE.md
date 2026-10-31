@@ -6,7 +6,7 @@ is the source of truth for *where*.
 ## Workspace layout
 
 ```
-potarek/
+asac/
 ├── Cargo.toml              # workspace
 ├── rust-toolchain.toml     # pins Rust 1.92 (Arti 0.47 requirement)
 ├── crates/

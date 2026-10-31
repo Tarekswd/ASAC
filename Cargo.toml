@@ -20,9 +20,14 @@ members = [
     "crates/asac-mix",
     "crates/asac-client",
 ]
+# asac-mix-nym (the live Nym mixnet backend) is kept OUT of the workspace on purpose: nym-sdk's tree requires
+# blake3 >=1.7,<1.8.4, which conflicts with asac-pir's pinned `blake3 = "=1.8.7"`. A shared workspace lockfile
+# can't satisfy both, so the Nym crate resolves its own lockfile. Build it with:
+#   cargo build --manifest-path crates/asac-mix-nym/Cargo.toml
+exclude = ["crates/asac-mix-nym"]
 
 [workspace.package]
 edition = "2021"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/Tarekswd/potarek"
+repository = "https://github.com/Tarekswd/asac"
 rust-version = "1.92"

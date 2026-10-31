@@ -41,7 +41,7 @@ impl HashMatchBackend for NoKnownIllegal {
     }
 }
 
-const USER_AGENT: &str = "asac-crawler/0.0 (+https://github.com/Tarekswd/potarek)";
+const USER_AGENT: &str = "asac-crawler/0.0 (+https://github.com/Tarekswd/asac)";
 const MAX_RESULTS: usize = 10;
 
 fn main() -> Result<()> {

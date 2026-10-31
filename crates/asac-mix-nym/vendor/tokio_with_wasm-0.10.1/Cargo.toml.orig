@@ -1,0 +1,75 @@
+[package]
+name = "tokio_with_wasm"
+version = "0.10.1"
+edition = "2021"
+rust-version = "1.85"
+license = "MIT"
+description = "Mimicking tokio functionalities on web browsers"
+repository = "https://github.com/cunarist/tokio-with-wasm"
+
+[package.metadata.docs.rs]
+default-target = "wasm32-unknown-unknown"
+all-features = true
+
+[features]
+# https://github.com/tokio-rs/tokio/blob/master/tokio/Cargo.toml
+default = []
+full = ["fs", "io-util", "macros", "sync", "time", "rt", "rt-multi-thread"]
+# `io-util`, `macros`, `sync`, and `rt` forward to `tokio`, because the
+# glue code re-exports those parts of `tokio` even on the web
+# (`rt` only for the runtime-independent `task_local!` machinery).
+# The other features only gate glue modules implemented here;
+# their native counterparts come from your own dependency on `tokio`,
+# which needs the same features enabled (see the README).
+io-util = ["tokio/io-util"]
+macros = ["tokio/macros"]
+sync = ["tokio/sync"]
+fs = []
+time = []
+rt = ["tokio/rt"]
+rt-multi-thread = ["rt"]
+
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+wildcard_imports = "deny"
+
+[dependencies]
+hashbrown = { version = "0.16", default-features = false }
+tokio_with_wasm_proc = "0.10.1"
+tokio = "1.x.x"
+# 0.2.120 is the first version whose `usize` ABI
+# is pointer-sized on `wasm64` instead of `u32`.
+wasm-bindgen = "0.2.120"
+wasm-bindgen-futures = "0.4.45"
+js-sys = "0.3.70"
+web-sys = { version = "0.3.70", features = [
+    'Worker',
+    'WorkerOptions',
+    'WorkerType',
+    'DedicatedWorkerGlobalScope',
+    'MessageEvent',
+    'ErrorEvent',
+    'Blob',
+    "BlobPropertyBag",
+    'Url',
+    'Performance',
+    'File',
+    'StorageManager',
+    'FileSystemHandle',
+    'FileSystemHandleKind',
+    'FileSystemFileHandle',
+    'FileSystemDirectoryHandle',
+    'FileSystemGetFileOptions',
+    'FileSystemGetDirectoryOptions',
+    'FileSystemRemoveOptions',
+    'FileSystemCreateWritableOptions',
+    'FileSystemWritableFileStream',
+    'WritableStream',
+] }
+
+[dev-dependencies]
+# The crate itself, so that the integration tests get its features.
+tokio_with_wasm = { path = ".", features = ["full"] }
+wasm-bindgen-test = "0.3"
+js-sys = "0.3.70"

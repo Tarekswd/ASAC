@@ -1,0 +1,40 @@
+# Standalone crate (excluded from the workspace): nym-sdk needs blake3 <1.8.4, which conflicts with asac-pir's
+# pinned blake3 =1.8.7, so this resolves its own lockfile. Package fields are spelled out (not `.workspace`)
+# because an excluded crate cannot inherit workspace.package. Build: cargo build --manifest-path <this file>.
+[package]
+name = "asac-mix-nym"
+version = "0.0.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/Tarekswd/asac"
+rust-version = "1.92"
+publish = false
+description = "Live Nym (Sphinx mixnet) backend for asac_mix::MixTransport: pushes fixed-size framed packets through the Nym mixnet as Sphinx packets. Needs the network + nym-sdk (EXTERNAL-PLAN item 3)."
+
+[dependencies]
+asac-mix = { path = "../asac-mix" }
+# The live mixnet: deployed Rust Sphinx network. We never roll crypto -- Sphinx + mixing are Nym's.
+# STATUS (2026-10-31): BUILDS + offline test passes with the workarounds below. Build with the stable
+# toolchain (not the repo's 1.92): `cargo +stable test --manifest-path crates/asac-mix-nym/Cargo.toml`.
+# Proven: the nym-sdk 1.22.3 tree compiles and NymTransport compiles+links against the real SDK, offline
+# parse test green. NOT yet proven: a live send (the `live_send` test is #[ignore]; needs a Nym gateway).
+#
+# Four upstream blockers had to be worked around to get here, in order:
+#   1. crates.io nym-sdk =1.21.6 vs asac-pir's blake3 =1.8.7 -> version conflict (why this crate is EXCLUDED
+#      from the workspace: it keeps its own lockfile);
+#   2. sqlx 0.9 (a nym dep) requires rustc >=1.94, repo is pinned 1.92 -> build with the stable toolchain;
+#   3. crates.io nym 1.21.6/1.22.x siblings -> internal API skew -> use the git release TAG instead (one
+#      self-consistent snapshot of all nym crates);
+#   4. the tag's nym-client-core needs YANKED tokio_with_wasm(+_proc) 0.10.1 -> vendored under vendor/ and
+#      patched in via [patch.crates-io] (a path patch bypasses crates.io's yank refusal; wasm32-only, so not
+#      compiled on this target).
+nym-sdk = { git = "https://github.com/nymtech/nym", tag = "nym-binaries-v2026.21-hanoi" }
+# nym-sdk is async; the MixTransport seam is sync, so this crate owns a runtime and block_on's each send.
+tokio = { version = "1", features = ["rt-multi-thread"] }
+
+[patch.crates-io]
+# Work around blocker #4: nym-client-core needs the YANKED tokio_with_wasm 0.10.1 (a wasm32-only dep). A path
+# patch satisfies resolution from vendored source, bypassing crates.io's refusal to select a yanked version;
+# on non-wasm targets it is never compiled. Vendored crate: vendor/tokio_with_wasm-0.10.1 (see STATUS above).
+tokio_with_wasm = { path = "vendor/tokio_with_wasm-0.10.1" }
+tokio_with_wasm_proc = { path = "vendor/tokio_with_wasm_proc-0.10.1" }  # proc-macro sibling, yanked with it
