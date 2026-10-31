@@ -68,16 +68,18 @@ default.
 
 ## 5. Open obligations (the F6 review checklist)
 
-- **O1 — Formalize §3.1.** A written reduction: distinguishing the term from the operator's view ⇒ breaking
-  PIANO (A1) or the PRF (A2). Make the hoisting of the public hash explicit.
+- **O1 — Formalize §3.1.** **Drafted in §6.3** (a game-based reduction from keyword-privacy to PIANO
+  index-hiding, with the public-hash hoisting made explicit). For review: check the reduction is tight and the
+  hybrid composition with the document-PIR step (§3.2) is sound.
 - **O2 — Closed in code.** `PrivateCorpus::search` now performs exactly `fetches_per_query =
   min(MAX_FETCHES_PER_QUERY, sqrt(n_docs))` document fetches every time (real results first, dummy fetches for
   the remainder, discarded), with the dummies spread across the index by a rotating cursor. The count is a
   corpus constant, independent of the query, and `K ≤ sqrt(n)` keeps it within the per-chunk PIANO budget.
   Remaining for review: confirm the dummy indices carry no exploitable correlation, and that truncating a
   posting list longer than `K` (a result cap) is acceptable.
-- **O3 — Quantify vocabulary leakage.** The term universe / bucket structure may leak more than "which term";
-  bound it.
+- **O3 — Quantify vocabulary leakage.** **Drafted in §6.4** (bounds the term universe and the term-level
+  anonymity set; flags the public-hash membership-oracle question). For review: confirm the bound and that no
+  cross-system oracle leaks term membership.
 - **O4 — Discharge PIANO's own deferred obligations** flagged in `single_server` (the in-repo implementation,
   not just the paper's scheme).
 - **O5 — Timing side channel.** A1 covers the logical view, not wall-clock. Measure timing independence from
@@ -91,3 +93,94 @@ default.
 
 Only once O1-O6 are resolved and an external cryptographer has reviewed this argument does any public
 "mathematically unable to profile you" claim become defensible.
+
+## 6. Formal arguments (DRAFT, for review)
+
+This section discharges the *written* parts of O1 and O3. It is a draft for a cryptographer to check; it
+reduces to the assumptions in §2 and does not re-prove them.
+
+### 6.1 Model and server view
+
+A single honest-but-curious operator runs the server and sees the full protocol transcript. For one
+`PrivateKeyword` lookup of term `t` ([proof: `crates/asac-search/src/lib.rs` `locate`/`PrivateKeyword::search`]):
+
+- The client computes `locate(t) = (b, fp)` **locally**, where `b = (blake3(t)[0..8] as u64 LE) mod n_buckets`
+  and `fp = blake3(t)[8..16]`. `blake3` here is **unkeyed and public** — a bucketing function, not a secret.
+- The client issues one PIANO query `Q` for logical bucket index `b` and receives the whole fixed-width bucket
+  (`BUCKET_WIDTH = MAX_ENTRIES_PER_BUCKET · ENTRY_LEN = 8 · 73 = 584` bytes), then matches `fp` **client-side**.
+
+So the only part of the server's view that depends on `t` is the PIANO query `Q(b)`. The response size is a
+constant independent of `t`, its popularity, or its posting-list length; the fingerprint match happens on the
+client and is never sent to the server. (`PrivateCorpus` composes this with a second, independent PIANO
+instance keyed by document id, §3.2; the per-query document-fetch *count* is fixed by O2.)
+
+### 6.2 Assumptions (restated from §2)
+
+- **A1 (PIANO index-hiding).** For the single-server PIANO scheme, the server's view of a query for logical
+  index `i` is computationally indistinguishable from its view for any `j`, over the client's secret key and
+  randomness. Relied upon from the PIANO paper [Zhou et al., IEEE S&P 2024]; our implementation's own
+  obligations are **O4**.
+- **A2 (CSPRF).** PIANO's keyed offset function (`blake3::keyed_hash` under the client's secret key) is a
+  secure PRF. PIANO's index-hiding (A1) is argued relative to A2. Note this is a *different* use of blake3
+  from the *unkeyed* `locate` hash in §6.1, which carries no secret and is not relied on for hiding.
+
+### 6.3 O1 — keyword privacy reduces to PIANO index-hiding
+
+**Game `KW-IND`.** The adversary `A` (the server) outputs two terms `t0, t1`. The challenger samples a bit
+`β`, runs the client lookup for `t_β`, and gives `A` the resulting server-side transcript. `A` outputs `β'`.
+Define `Adv_KW(A) = |Pr[β' = β] − 1/2|`.
+
+**Claim.** For every `A` there is a reduction `B` of essentially the same running time with
+`Adv_KW(A) ≤ Adv_IH(B)`, where `Adv_IH` is advantage against PIANO index-hiding (A1). Hence under A1,
+`Adv_KW(A)` is negligible.
+
+**Reduction `B`.** `B` receives `t0, t1` from `A` and computes `b0, b1` via the public `locate` (it needs no
+secret to do so).
+1. If `b0 = b1`, the server's view is identical for both terms (same bucket queried, same constant-width
+   response), so `Adv_KW = 0` on this pair; `B` outputs a random bit.
+2. If `b0 ≠ b1`, `B` forwards `(b0, b1)` to its index-hiding challenger, receives the server-view of `Q(b_β)`,
+   relays it to `A`, and outputs `A`'s guess. Then `Adv_IH(B) = Adv_KW(A)`.
+
+**Hoisting the public hash.** `locate` is public, deterministic, and evaluated entirely client-side; the
+server never receives `t`. The hash influences the server's view *only* through the bucket index `b`, and the
+response width is a constant. An operator may freely recompute `locate` on any guessed term, but by A1 it still
+cannot tell which `b` was queried — so distinguishing `t0` from `t1` is exactly distinguishing `Q(b0)` from
+`Q(b1)`. The fingerprint `fp` lives inside the PIR-fetched bucket and is matched on the client, adding nothing
+to the server's view.
+
+**Full chain.** `KW-privacy ⇐ A1 ⇐ A2`: the end-to-end assumption is "`blake3::keyed_hash` is a PRF" plus "the
+PIANO scheme, and our implementation (O4), is index-hiding."
+
+**Composition (`PrivateCorpus`).** The document-PIR step is a second, independent PIANO instance; the same
+reduction applies to it, and independence gives a two-step hybrid: an adversary distinguishing the whole
+transcript implies one distinguishing a single PIANO instance. For review: confirm the hybrid and that the two
+instances share no state that could correlate the queries.
+
+**Out of scope here.** Wall-clock timing (**O5**), the result-cap truncation (**O2**), and vocabulary-level
+leakage (**O3**, next).
+
+### 6.4 O3 — vocabulary-leakage bound
+
+**What the transcript reveals.** The public parameters `n_buckets`, `BUCKET_WIDTH`, `MAX_ENTRIES_PER_BUCKET =
+8`, `FP_LEN = 8`, `MAX_DOCS_PER_TERM = 16` are known. Because each bucket holds at most
+`MAX_ENTRIES_PER_BUCKET` entries (overflow dropped at build time), the number of distinct indexed terms is at
+most `n_buckets · 8`. That bounds the *size* of the searchable vocabulary; it does not reveal *which* terms are
+in it. The term→bucket map is public (anyone can evaluate `locate`), but corpus membership is already known to
+the server (it built the index), and a network observer sees only that a fixed-shape PIANO query occurred.
+
+**Term anonymity set.** Under A1 the bucket index is hidden, so from the server's view a lookup is consistent
+with every term in the vocabulary: the server's posterior over the queried term equals its prior. The
+term-level anonymity set is therefore the full indexed vocabulary (`≤ n_buckets · 8`).
+
+**Caveats to review.**
+- *Bucket collisions.* About `|vocab| / n_buckets` terms share a bucket; the 64-bit fingerprint disambiguates
+  client-side. A within-bucket fingerprint collision (≤ 8 entries, so probability on the order of `2^-61`) would
+  return a wrong posting — a correctness issue, not a privacy leak.
+- *Public (unkeyed) hash.* Because `locate` is public, an adversary who could observe whether a specific
+  client's query *succeeds* (hit vs. miss) could test membership of guessed terms. The protocol as written does
+  not expose hit/miss to the server — matching is client-side and the per-query document-fetch count is fixed
+  (O2). **For review:** confirm no cross-system oracle (e.g., follow-on fetch behaviour) leaks hit/miss.
+- *Overflow drop.* Dropping entries past `MAX_ENTRIES_PER_BUCKET` is availability, not privacy.
+
+**Residual leakage.** The public parameters bound `|vocab|`; nothing in the transcript reveals which term was
+searched. This is the "by design" row of §4's table, now quantified.

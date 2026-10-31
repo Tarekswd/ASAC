@@ -2,8 +2,9 @@
 
 Short, honest cold-email templates for the people and groups in [EXTERNAL-PLAN.md](EXTERNAL-PLAN.md)
 ("Who to contact"). They are deliberately plain: say what exists, what is unproven, and the one thing
-you want back. Adapt the bracketed bits. Send from a real address, link the public repo (once it is
-published — item 9), and attach or link `docs/PIR-SECURITY.md` and `docs/FLAGSHIP-DESIGN.md` where noted.
+you want back. Adapt the bracketed bits. Send from a real address, link the public repo
+(https://github.com/Tarekswd/ASAC), and attach or link `docs/PIR-SECURITY.md` and `docs/FLAGSHIP-DESIGN.md`
+where noted.
 
 One rule for all of them: **do not claim the privacy property is proven.** The honest line is "designed so
 that a single honest-but-curious server learns nothing about the query, and we want that checked," not
@@ -18,35 +19,46 @@ that a single honest-but-curious server learns nothing about the query, and we w
 > a document PIR step, so the design goal is that a single honest-but-curious server answers a search without
 > learning which term or document was requested. It is composed entirely from audited primitives (BLAKE3,
 > ChaCha20, the PIANO single-server PIR construction, Sphinx via Nym for transport) — no new cryptography.
-> The engine works end to end (crawl over Tor, safety filtering, BM25 + PageRank ranking, onion service) and
-> the PIR layer is implemented and unit-tested, but the formal privacy argument has not been externally
-> reviewed, which is exactly what I am looking for.
+> The engine works end to end and is verified live (crawl over Tor, safety filtering, BM25 + PageRank ranking,
+> and a second client fetching results from the running onion service); the PIR layer is implemented and
+> unit-tested; the Nym mixnet transport compiles against the SDK; and the metadata-timing harness runs in
+> Shadow. A written security reduction is drafted (`docs/PIR-SECURITY.md` §6) but has not been externally
+> reviewed — which is exactly what I am looking for.
 
 ---
 
-## 1. Cryptographer / PETS review (EXTERNAL-PLAN item 4; obligations O1, O3, O4, O5)
+## 1. Cryptographer / PETS review (EXTERNAL-PLAN item 4; O1/O3 drafted, O4/O5 open)
 
 **To:** an applied-crypto researcher, or the Tor research list, or a PoPETs-adjacent contact.
-**Attach:** `docs/PIR-SECURITY.md` (the draft argument + open obligations).
+**Attach:** `docs/PIR-SECURITY.md` (the argument, incl. the §6 reductions) and `docs/FLAGSHIP-DESIGN.md`
+(design, threat model, measured PIR costs, the Shadow measurement plan).
 
-> Subject: PIR-based private search on Arti — would value a second pair of eyes on the security argument
+> Subject: PIR-based private search on Arti — a second pair of eyes on the query-privacy argument
 >
 > Hi [name],
 >
-> I've built an open-source onion-service search engine whose query path is private information retrieval:
-> a keyword-PIR step composed with a document-PIR step over PIANO, the goal being that a single
-> honest-but-curious server learns nothing about the query. [repo link]
+> I've built an open-source onion-service search engine (ASAC) whose query path is private information
+> retrieval: a keyword-PIR step composed with a document-PIR step over PIANO single-server PIR, so the design
+> goal is that a single honest-but-curious server answers a search without learning which term or documents
+> were requested. It's composition of standard primitives only — no new crypto.
+> Repo: https://github.com/Tarekswd/ASAC
 >
-> The construction is composition of standard primitives only — no new crypto. I've written up the security
-> argument and, honestly, the open obligations I can't discharge myself: [list the O1/O3/O4/O5 one-liners].
-> Before I'd ever put a privacy claim in front of users I want these checked by someone who does this for a
-> living.
+> I've written the argument as a game-based reduction (`docs/PIR-SECURITY.md` §6): keyword-privacy reduces to
+> PIANO's index-hiding (§6.3), with the public term→bucket hash hoisted out explicitly, plus a
+> vocabulary-leakage bound (§6.4). Two obligations I can't discharge myself remain, and that's really what I'm
+> asking about:
+>   - O4 — our *implementation* of PIANO (not just the paper's scheme) carries its own proof obligations;
+>   - O5 — wall-clock timing, which the logical argument doesn't cover. We measure timing-independence in a
+>     Shadow simulation (a first run puts a timing adversary at chance), but I'd value your view on whether
+>     that's sufficient.
+> I'd also be grateful if you'd sanity-check the §6.3 reduction and the §6.4 bound themselves.
 >
-> Would you be willing to look at the ~[N]-page argument (attached), or point me to the right person or venue?
-> I'm aiming at a PoPETs submission once it holds up. No rush and no expectation — I know this is an ask.
+> Before I put any privacy claim in front of users I want this reviewed by someone who does it for a living.
+> Would you be willing to look at the argument (~[N] pages), or point me to the right person or venue? I'm
+> aiming at a PoPETs submission once it holds up. No rush and no expectation — I know this is an ask.
 >
 > Thanks either way,
-> [name]
+> [name] — [your email]
 
 ---
 
@@ -54,18 +66,19 @@ that a single honest-but-curious server learns nothing about the query, and we w
 
 **To:** github.com/nymtech (an issue/discussion on `nym-sdk`), or the Nym community channel.
 
-> Subject: Using nym-sdk as the Sphinx transport for a private search client — sanity check
+> Subject: nym-sdk as the Sphinx transport for a private search client — build issue + a sizing question
 >
 > Hi,
 >
-> I'm building an open-source private search engine on Arti and want the client's cover-traffic stream to ride
-> a real deployed mixnet rather than anything I'd roll myself. I've got a `MixTransport` seam with Poisson
-> cover traffic and fixed-size framing already; I want to implement `send()` by submitting each framed packet
-> as a Nym Sphinx packet.
+> I'm building an open-source private search engine on Arti (ASAC) and route the client's Poisson cover-traffic
+> stream over Nym rather than rolling my own mixes. I've implemented a `MixTransport` backend on `nym-sdk`
+> (`send_message` of fixed-size framed packets) and it compiles against the SDK.
 >
-> Two questions before I wire it up: (1) is `nym-sdk` the right entry point for "send these fixed-size
-> payloads through the mixnet" from a Rust client, and (2) is there anything about packet sizing or rate that
-> I should match to Nym's own cover-traffic model so I'm not fighting it? Repo + design doc: [links].
+> One blocker and one question: (1) building `nym-sdk` from the latest release tag pulls a *yanked*
+> `tokio_with_wasm` 0.10.1 and won't resolve on crates.io either — I filed/plan to file a GitHub issue with a
+> minimal repro; is there a recommended known-good version/tag to depend on meanwhile? (2) Is there a packet
+> size or send-rate I should match to Nym's own cover-traffic model so I'm not fighting it? Repo:
+> https://github.com/Tarekswd/ASAC
 >
 > Thanks,
 > [name]
