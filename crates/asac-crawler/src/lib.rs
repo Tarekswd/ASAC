@@ -41,6 +41,9 @@ pub struct Extracted {
     pub text: String,
     /// Absolute `http(s)` outgoing links (relative hrefs resolved against the page URL, fragments stripped).
     pub links: Vec<String>,
+    /// Absolute `http(s)` media URLs referenced by the page (`<img>`/`<source>`). Collected but NOT fetched;
+    /// this is the hook for an opt-in media safety-hashing stage (see `CrawlConfig::fetch_media`).
+    pub media: Vec<String>,
 }
 
 const NON_TEXT_TAGS: [&str; 4] = ["script", "style", "noscript", "template"];
@@ -101,14 +104,40 @@ pub fn extract(base: &Url, html: &str) -> Extracted {
         }
     }
 
-    Extracted { title, text, links }
+    // Media URLs (img/source src), collected only — never fetched here. The opt-in fetch+hash stage would use
+    // these (gated by CrawlConfig::fetch_media); today they are inert so the crawler stays HTML-only.
+    let mut media = Vec::new();
+    if let Ok(sel) = Selector::parse("img[src], source[src]") {
+        for el in doc.select(&sel) {
+            if let Some(src) = el.value().attr("src") {
+                if let Ok(mut u) = base.join(src) {
+                    if matches!(u.scheme(), "http" | "https") {
+                        u.set_fragment(None);
+                        media.push(u.to_string());
+                    }
+                }
+            }
+        }
+    }
+
+    Extracted {
+        title,
+        text,
+        links,
+        media,
+    }
 }
 
-/// How a crawl is bounded. Defaults: polite, same-host, 1000 pages.
+/// How a crawl is bounded. Defaults: polite, same-host, 1000 pages, no media fetching.
 pub struct CrawlConfig {
     pub user_agent: String,
     pub max_pages: usize,
     pub same_host_only: bool,
+    /// Opt-in hook for a future media safety-hashing stage. **Off by default and currently inert**: media URLs
+    /// are extracted into [`CrawledDoc::media`] but never fetched. Turning this on is deliberately gated — it
+    /// would pull untrusted image bytes (and image-decoder attack surface) into the HTML-only crawler, so it
+    /// must land with sandboxed decoding and a content-safety partner (see `asac-safety` scope note).
+    pub fetch_media: bool,
 }
 
 impl Default for CrawlConfig {
@@ -117,18 +146,21 @@ impl Default for CrawlConfig {
             user_agent: "asac-crawler".to_string(),
             max_pages: 1000,
             same_host_only: true,
+            fetch_media: false,
         }
     }
 }
 
 /// One crawled page, ready to hand to the index. `text` is the extracted visible text (what gets indexed);
-/// `body` is the document **as fetched** (what the content-safety filter should hash).
+/// `body` is the document **as fetched** (what the content-safety filter should hash); `media` lists referenced
+/// media URLs (never fetched; the hook for the opt-in media stage).
 pub struct CrawledDoc {
     pub url: String,
     pub title: String,
     pub text: String,
     pub links: Vec<String>,
     pub body: String,
+    pub media: Vec<String>,
 }
 
 /// Breadth-first crawl from `seeds`, fetching through `fetcher`. Respects each origin's `robots.txt`, stays in
@@ -172,12 +204,15 @@ pub fn crawl<F: Fetcher>(fetcher: &F, seeds: &[&str], cfg: &CrawlConfig) -> Vec<
                 queue.push_back(u);
             }
         }
+        // `cfg.fetch_media` is the opt-in hook for a future media safety-hashing stage; it stays inert here
+        // (media URLs are carried on the doc but never fetched), so the crawler remains HTML-only either way.
         out.push(CrawledDoc {
             url: url.to_string(),
             title: ex.title,
             text: ex.text,
             links: ex.links,
             body: page.body, // the document as fetched, for the safety hash
+            media: ex.media,
         });
     }
     out
@@ -269,6 +304,21 @@ mod tests {
         assert!(
             !ex.links.iter().any(|l| l.starts_with("mailto")),
             "non-http links dropped"
+        );
+    }
+
+    #[test]
+    fn extract_collects_media_urls_http_only() {
+        let base = Url::parse("http://site.example/dir/page.html").unwrap();
+        let html = r#"<body><img src="/a.jpg"><img src="pic.png">
+            <source src="http://cdn.example/v.webm"><img src="data:image/png;base64,xx"></body>"#;
+        let ex = extract(&base, html);
+        assert!(ex.media.contains(&"http://site.example/a.jpg".to_string()));
+        assert!(ex.media.contains(&"http://site.example/dir/pic.png".to_string()));
+        assert!(ex.media.contains(&"http://cdn.example/v.webm".to_string()));
+        assert!(
+            !ex.media.iter().any(|m| m.starts_with("data:")),
+            "non-http(s) media is dropped"
         );
     }
 
