@@ -91,7 +91,7 @@ impl PrivateSearch {
     pub fn search(&mut self, term: &str) -> Option<String> {
         let row = self.directory.iter().position(|t| t == term)?;
         let server = Server::new(&self.server_db);
-        let rec = logical_query(&mut self.hints, &self.perm, row, &server);
+        let rec = logical_query(&mut self.hints, &self.perm, row, &server)?;
         let text = String::from_utf8_lossy(&rec).trim_end_matches('\0').to_string();
         if text.is_empty() {
             None
@@ -193,7 +193,7 @@ impl PrivateKeyword {
     pub fn lookup(&mut self, term: &str) -> Option<Vec<u32>> {
         let (bucket, fp) = locate(term, self.n_buckets);
         let server = Server::new(&self.server_db);
-        let rec = logical_query(&mut self.hints, &self.perm, bucket, &server);
+        let rec = logical_query(&mut self.hints, &self.perm, bucket, &server)?;
 
         for slot in 0..MAX_ENTRIES_PER_BUCKET {
             let off = slot * ENTRY_LEN;
@@ -358,10 +358,11 @@ impl PrivateCorpus {
     }
 
     /// Privately search `term`: fetch its posting list, then fetch document records. Returns up to
-    /// `fetches_per_query` records (trailing NUL padding trimmed), best-first. The server learns neither the
-    /// term nor the docs, and always sees exactly `fetches_per_query` doc fetches regardless of how many
-    /// results the term has (PIR-SECURITY.md O2) — real results first, the rest dummy fetches discarded.
-    pub fn search(&mut self, term: &str) -> Vec<Vec<u8>> {
+    /// `fetches_per_query` records (trailing NUL padding trimmed), best-first, or `None` if the PIR hint pool
+    /// is exhausted (re-preprocess). The server learns neither the term nor the docs, and always sees exactly
+    /// `fetches_per_query` doc fetches regardless of how many results the term has (PIR-SECURITY.md O2) — real
+    /// results first, the rest dummy fetches discarded.
+    pub fn search(&mut self, term: &str) -> Option<Vec<Vec<u8>>> {
         let ids = self.keywords.lookup(term).unwrap_or_default();
         let k = self.fetches_per_query;
 
@@ -389,13 +390,13 @@ impl PrivateCorpus {
         let server = Server::new(&self.doc_db);
         let mut out = Vec::with_capacity(real_count);
         for (slot, &id) in to_fetch.iter().enumerate() {
-            let rec = logical_query(&mut self.doc_hints, &self.doc_perm, id, &server);
+            let rec = logical_query(&mut self.doc_hints, &self.doc_perm, id, &server)?;
             if slot < real_count {
                 let end = rec.iter().rposition(|&b| b != 0).map_or(0, |p| p + 1);
                 out.push(rec[..end].to_vec());
             }
         }
-        out
+        Some(out)
     }
 }
 
@@ -509,7 +510,7 @@ mod tests {
         let keyword_entries = vec![("alpha", vec![0u32, 5, 10]), ("beta", vec![1u32])];
         let mut corpus = PrivateCorpus::build(&docs, &keyword_entries, 64, 9);
 
-        let hits = corpus.search("alpha");
+        let hits = corpus.search("alpha").unwrap();
         let texts: Vec<String> = hits
             .iter()
             .map(|r| String::from_utf8_lossy(r).to_string())
@@ -519,8 +520,8 @@ mod tests {
         assert!(texts.iter().any(|t| t == "doc5:payload"));
         assert!(texts.iter().any(|t| t == "doc10:payload"));
 
-        assert_eq!(corpus.search("beta"), vec![b"doc1:payload".to_vec()]);
-        assert!(corpus.search("absent").is_empty());
+        assert_eq!(corpus.search("beta").unwrap(), vec![b"doc1:payload".to_vec()]);
+        assert!(corpus.search("absent").unwrap().is_empty());
     }
 
     #[test]
@@ -552,7 +553,7 @@ mod tests {
         let vocab = ["ownership", "filler"];
         let mut corpus = PrivateCorpus::from_index(&idx.reader(), &vocab, 3, 256, 5).unwrap();
 
-        let hits = corpus.search("ownership");
+        let hits = corpus.search("ownership").unwrap();
         let texts: Vec<String> = hits
             .iter()
             .map(|r| String::from_utf8_lossy(r).to_string())

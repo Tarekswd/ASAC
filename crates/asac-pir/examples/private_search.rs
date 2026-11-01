@@ -53,7 +53,7 @@ fn main() {
 
     let query = "maps";
     let row = terms.iter().position(|&t| t == query).expect("term in directory");
-    let got = logical_query(&mut state, &perm, row, &server);
+    let got = logical_query(&mut state, &perm, row, &server).expect("within budget");
     println!(
         "search {query:?} -> {}",
         String::from_utf8_lossy(&got).trim_end_matches('\0')

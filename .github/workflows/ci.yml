@@ -49,8 +49,13 @@ jobs:
       RUSTFLAGS: ""
     steps:
       - uses: actions/checkout@v4
-      - name: Install cargo-audit
-        run: cargo install cargo-audit --locked
+      - name: Install cargo-audit + cargo-deny
+        run: |
+          cargo install cargo-audit --locked
+          cargo install cargo-deny --locked
       - name: Audit dependencies
         # Reads .cargo/audit.toml (known, fix-less upstream advisories are ignored there); fails on anything new.
         run: cargo audit
+      - name: Deny (licenses, bans, sources)
+        # Supply-chain gate per deny.toml. Advisories are left to cargo audit above (single ignore list).
+        run: cargo deny check licenses bans sources

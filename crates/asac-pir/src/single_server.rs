@@ -355,19 +355,18 @@ pub fn preprocess_streaming(
     }
 }
 
-/// Privately fetch record `i`: one server round-trip, then refresh the consumed hints. Panics only if the
-/// prototype runs out of provisioned hints (raise [`Params`] if so).
-pub fn query(state: &mut ClientState, i: usize, server: &Server) -> Vec<u8> {
+/// Privately fetch record `i`: one server round-trip, then refresh the consumed hints. Returns `None` when the
+/// provisioned hint pool is exhausted (raise [`Params`], or re-preprocess) — it never answers non-privately.
+pub fn query(state: &mut ClientState, i: usize, server: &Server) -> Option<Vec<u8>> {
     let s = state.sqrt_n;
     let chunk = i / s;
     let off = i % s;
 
-    // 1. Consume a primary equation that selects index i.
+    // 1. Consume a primary equation that selects index i (`None` => the hint pool is exhausted).
     let pos = state
         .equations
         .iter()
-        .position(|e| !e.consumed && e.offsets[chunk] == off)
-        .expect("no unconsumed equation covers i; raise Params.primaries");
+        .position(|e| !e.consumed && e.offsets[chunk] == off)?;
     let offsets = state.equations[pos].offsets.clone();
     let parity = state.equations[pos].parity.clone();
     state.equations[pos].consumed = true;
@@ -375,8 +374,7 @@ pub fn query(state: &mut ClientState, i: usize, server: &Server) -> Vec<u8> {
     // 2. Consume a replacement in this chunk, distinct from i.
     let rpos = state.replacements[chunk]
         .iter()
-        .position(|r| !r.consumed && r.index != i)
-        .expect("no unconsumed replacement != i; raise Params.replacements_per_chunk");
+        .position(|r| !r.consumed && r.index != i)?;
     let r_index = state.replacements[chunk][rpos].index;
     let r_value = state.replacements[chunk][rpos].value.clone();
     state.replacements[chunk][rpos].consumed = true;
@@ -410,11 +408,17 @@ pub fn query(state: &mut ClientState, i: usize, server: &Server) -> Vec<u8> {
         });
     }
 
-    xi
+    Some(xi)
 }
 
 /// Fetch logical record `i` through a shared permutation: translate to its physical slot, then run [`query`].
-pub fn logical_query(state: &mut ClientState, perm: &Permutation, i: usize, server: &Server) -> Vec<u8> {
+/// `None` if the hint pool is exhausted (see [`query`]).
+pub fn logical_query(
+    state: &mut ClientState,
+    perm: &Permutation,
+    i: usize,
+    server: &Server,
+) -> Option<Vec<u8>> {
     query(state, perm.physical(i), server)
 }
 
@@ -441,7 +445,7 @@ mod tests {
         let server = Server::new(&db);
         // includes two queries in the same chunk (0 and 1) to exercise refresh + repeated consumption.
         for &i in &[0usize, 1, 5, 10, 15] {
-            let got = query(&mut state, i, &server);
+            let got = query(&mut state, i, &server).expect("within budget");
             assert_eq!(got, want(i, got.len()), "record {i}");
         }
     }
@@ -479,12 +483,28 @@ mod tests {
                 picked.insert((next() % n as u64) as usize);
             }
             for i in picked {
-                let got = query(&mut state, i, &server);
+                let got = query(&mut state, i, &server).expect("within budget");
                 let mut expect = records[i].clone();
                 expect.resize(got.len(), 0);
                 assert_eq!(got, expect, "n={n} width={width} index={i}");
             }
         }
+    }
+
+    // V4: exhausting the provisioned hint pool must return None (re-preprocess), never panic.
+    #[test]
+    fn query_returns_none_when_hints_exhausted_instead_of_panicking() {
+        let db = db(16);
+        let mut state = preprocess(&db, Params::for_sqrt_n(4), 123);
+        let server = Server::new(&db);
+        let mut got_none = false;
+        for _ in 0..200 {
+            if query(&mut state, 0, &server).is_none() {
+                got_none = true;
+                break;
+            }
+        }
+        assert!(got_none, "exhausting the hint pool must yield None, not panic");
     }
 
     #[test]
@@ -560,7 +580,7 @@ mod tests {
         let server = Server::new(&db);
         // An arbitrary (adaptive-looking) logical order; each must come back correct through the permutation.
         for &i in &[3usize, 9, 0, 15, 6] {
-            let got = logical_query(&mut state, &perm, i, &server);
+            let got = logical_query(&mut state, &perm, i, &server).expect("within budget");
             let mut want = format!("record-{i:03}").into_bytes();
             want.resize(got.len(), 0);
             assert_eq!(got, want, "logical {i}");
@@ -589,7 +609,7 @@ mod tests {
         let mut state = preprocess_streaming(16, width, Params::for_sqrt_n(4), 55, records.iter().cloned());
         let server = Server::new(&db);
         for i in [2usize, 7, 11] {
-            let got = query(&mut state, i, &server);
+            let got = query(&mut state, i, &server).expect("within budget");
             let mut w = format!("rec-{i:04}").into_bytes();
             w.resize(got.len(), 0);
             assert_eq!(got, w, "record {i}");
@@ -622,7 +642,7 @@ mod tests {
 
         let q = "k";
         let row = terms.iter().position(|&t| t == q).unwrap();
-        let got = logical_query(&mut state, &perm, row, &server);
+        let got = logical_query(&mut state, &perm, row, &server).expect("within budget");
         let mut want = format!("R-{q}").into_bytes();
         want.resize(got.len(), 0);
         assert_eq!(got, want);

@@ -36,7 +36,7 @@ fn main() {
         let mut resp = 0usize;
         // One query per chunk, to stay within the per-chunk replacement budget (= sqrt(n)).
         for c in 0..s {
-            resp = query(&mut st, c * s, &server).len();
+            resp = query(&mut st, c * s, &server).expect("within budget").len();
         }
         let per = t2.elapsed() / s as u32;
 

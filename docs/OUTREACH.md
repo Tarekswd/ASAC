@@ -21,17 +21,25 @@ that a single honest-but-curious server learns nothing about the query, and we w
 > ChaCha20, the PIANO single-server PIR construction, Sphinx via Nym for transport) — no new cryptography.
 > The engine works end to end and is verified live (crawl over Tor, safety filtering, BM25 + PageRank ranking,
 > and a second client fetching results from the running onion service); the PIR layer is implemented and
-> unit-tested; the Nym mixnet transport compiles against the SDK; and the metadata-timing harness runs in
-> Shadow. A written security reduction is drafted (`docs/PIR-SECURITY.md` §6) but has not been externally
-> reviewed — which is exactly what I am looking for.
+> unit-tested; the Nym mixnet transport compiles against the SDK; and the metadata-timing property is
+> *measured* in Shadow (over repeated trials a timing adversary stays at chance, 1/N, and the searcher's
+> send-timing is KS-indistinguishable from cover traffic). The code carries no `unsafe` (forbidden
+> workspace-wide) and runs `cargo audit` + `cargo deny` in CI. A written security reduction is drafted
+> (`docs/PIR-SECURITY.md` §6) but has not been externally reviewed — which is exactly what I am looking for.
 
 ---
 
 ## 1. Cryptographer / PETS review (EXTERNAL-PLAN item 4; O1/O3 drafted, O4/O5 open)
 
 **To:** an applied-crypto researcher, or the Tor research list, or a PoPETs-adjacent contact.
-**Attach:** `docs/PIR-SECURITY.md` (the argument, incl. the §6 reductions) and `docs/FLAGSHIP-DESIGN.md`
-(design, threat model, measured PIR costs, the Shadow measurement plan).
+**Attach (the reviewer packet):**
+- `docs/PIR-SECURITY.md` — the security argument, incl. the §6 game-based reductions (the main review target).
+- `docs/FLAGSHIP-DESIGN.md` — design, threat model, measured PIR costs, the Shadow measurement plan.
+- `docs/THREAT-MODEL.md` — what is in and out of scope.
+- `REPRODUCE.md` — exact commands to rebuild and re-check every claim (build/test, PIR costs, Shadow F5).
+- `docs/ROADMAP.md` — where this sits and what is still open (O4/O5, live transport, audit).
+
+(All are in the public repo, so a link to it also suffices; attach the first two at minimum.)
 
 > Subject: PIR-based private search on Arti — a second pair of eyes on the query-privacy argument
 >

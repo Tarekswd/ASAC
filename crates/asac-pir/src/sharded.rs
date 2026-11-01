@@ -111,12 +111,7 @@ impl ShardedDb {
         let shard = i / self.shard_size;
         let local = i % self.shard_size;
         let server = Server::new(&self.shards[shard]);
-        Some(logical_query(
-            &mut self.hints[shard],
-            &self.perms[shard],
-            local,
-            &server,
-        ))
+        logical_query(&mut self.hints[shard], &self.perms[shard], local, &server)
     }
 }
 

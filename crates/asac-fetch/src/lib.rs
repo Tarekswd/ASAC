@@ -280,6 +280,13 @@ fn decompress(body: &[u8], encoding: &str) -> Vec<u8> {
     }
 }
 
+/// Fuzz entry point for the untrusted HTTP response parser (driven by `fuzz/`). Hidden from docs; not part of
+/// the supported API. Runs the full parse path over arbitrary bytes — it must never panic or over-read.
+#[doc(hidden)]
+pub fn __fuzz_parse(raw: &[u8]) {
+    let _ = parse_response(raw);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
