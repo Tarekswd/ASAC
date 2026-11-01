@@ -11,3 +11,6 @@ description = "Benchmark harness: connect time, TTFB, total fetch time and throu
 [dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "io-util", "time"] }
 anyhow = "1"
+
+[lints]
+workspace = true

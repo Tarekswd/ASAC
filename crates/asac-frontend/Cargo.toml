@@ -10,3 +10,6 @@ description = "ASAC results page: self-contained HTML (no JS, no third-party res
 
 [dependencies]
 url = "2.5.8"
+
+[lints]
+workspace = true

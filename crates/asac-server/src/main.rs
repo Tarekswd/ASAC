@@ -9,9 +9,10 @@
 //! Needs the live Tor network and a first-run bootstrap, so it is a manual binary, not a CI test. The request
 //! parsing and response building are pure and unit-tested.
 //!
-//! shortcut: serves requests one at a time (no per-request task spawning) and serves on port 80 regardless of
-//! the requested port; Equi-X PoW and graceful shutdown are not wired. Fine for a single-user prototype
-//! (privacy over throughput); add concurrency + PoW config when load or abuse require it.
+//! Each request is served on its own task, with a bounded concurrency cap and a per-request timeout so a flood
+//! of streams or a slow-loris client cannot exhaust the server (Equi-X PoW adds a further opt-in defence).
+//!
+//! shortcut: serves on port 80 regardless of the requested port. Fine for a single-user prototype.
 //!
 //! Usage: `cargo run -p asac-server -- <nickname> <seed-http-url> [more seeds...]`
 
@@ -30,6 +31,8 @@ use asac_site::handle;
 use futures::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use futures::StreamExt;
 use safelog::DisplayRedacted;
+use tokio::sync::Semaphore;
+use tokio::time::timeout;
 use tor_cell::relaycell::msg::Connected;
 use tor_hsservice::{config::OnionServiceConfigBuilder, handle_rend_requests, HsNickname};
 
@@ -43,6 +46,11 @@ impl HashMatchBackend for NoKnownIllegal {
 
 const USER_AGENT: &str = "asac-crawler/0.0 (+https://github.com/Tarekswd/asac)";
 const MAX_RESULTS: usize = 10;
+/// Cap on concurrently-served requests. Past this, incoming streams are shed rather than spawned unboundedly
+/// (a flood of rendezvous requests would otherwise exhaust memory/tasks). PoW (opt-in) is the upstream defence.
+const MAX_CONCURRENT_REQUESTS: usize = 256;
+/// Per-request wall-clock budget. Bounds a slow-loris client that opens a stream and stalls mid-request.
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 
 fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
@@ -176,20 +184,31 @@ async fn serve(reader: Arc<AsacReader>, authority: SharedAuthority, nickname: &s
     // handle_rend_requests accepts rendezvous requests and yields per-client stream requests. Serve each on
     // its own task so slow clients don't block others, and stop cleanly on Ctrl-C.
     let mut streams = Box::pin(handle_rend_requests(requests));
+    let sem = Arc::new(Semaphore::new(MAX_CONCURRENT_REQUESTS));
     loop {
         tokio::select! {
             maybe_req = streams.next() => {
                 let Some(req) = maybe_req else { break };
+                // Bound concurrency: take a permit up front and shed the request if we are at capacity, rather
+                // than spawn tasks without limit (DoS guard). The permit is released when the task ends.
+                let Ok(permit) = sem.clone().try_acquire_owned() else {
+                    eprintln!("at capacity ({MAX_CONCURRENT_REQUESTS} in flight); shedding a request");
+                    continue;
+                };
                 let reader = reader.clone();
                 // Snapshot the current authority table for this request (a re-crawl may later swap it).
                 let authority = authority.read().map(|a| a.clone()).unwrap_or_else(|_| Arc::new(Authority::empty()));
                 tokio::spawn(async move {
+                    let _permit = permit; // held for the task's lifetime; frees a slot on drop
                     let stream = match req.accept(Connected::new_empty()).await {
                         Ok(s) => s,
                         Err(e) => { eprintln!("accept failed: {e}"); return; }
                     };
-                    if let Err(e) = serve_one(stream, &reader, &authority).await {
-                        eprintln!("request failed: {e}");
+                    // Per-request timeout: a stalled client can't tie up a slot indefinitely.
+                    match timeout(REQUEST_TIMEOUT, serve_one(stream, &reader, &authority)).await {
+                        Ok(Ok(())) => {}
+                        Ok(Err(e)) => eprintln!("request failed: {e}"),
+                        Err(_) => eprintln!("request timed out after {}s", REQUEST_TIMEOUT.as_secs()),
                     }
                 });
             }
@@ -297,5 +316,48 @@ mod tests {
             .nickname(nick)
             .build()
             .expect("config builds");
+    }
+
+    // Slow-loris defence: a client that accepts the stream but never sends its request must be cut off by
+    // REQUEST_TIMEOUT, so it cannot hold a request slot forever. Verifies serve_one is interruptible.
+    #[tokio::test]
+    async fn slow_client_is_cut_off_by_the_request_timeout() {
+        use std::pin::Pin;
+        use std::task::{Context, Poll};
+
+        struct Stalled; // reads never resolve; writes are no-ops
+        impl AsyncRead for Stalled {
+            fn poll_read(
+                self: Pin<&mut Self>,
+                _: &mut Context<'_>,
+                _: &mut [u8],
+            ) -> Poll<std::io::Result<usize>> {
+                Poll::Pending
+            }
+        }
+        impl AsyncWrite for Stalled {
+            fn poll_write(
+                self: Pin<&mut Self>,
+                _: &mut Context<'_>,
+                b: &[u8],
+            ) -> Poll<std::io::Result<usize>> {
+                Poll::Ready(Ok(b.len()))
+            }
+            fn poll_flush(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+                Poll::Ready(Ok(()))
+            }
+            fn poll_close(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+                Poll::Ready(Ok(()))
+            }
+        }
+
+        let idx = AsacIndex::new().expect("index");
+        let reader = idx.reader();
+        let authority = Authority::empty();
+        let res = timeout(Duration::from_millis(50), serve_one(Stalled, &reader, &authority)).await;
+        assert!(
+            res.is_err(),
+            "a stalled client must be bounded by the per-request timeout"
+        );
     }
 }

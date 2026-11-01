@@ -14,3 +14,6 @@ asac-pir = { path = "../asac-pir" }
 asac-rank = { path = "../asac-rank" }
 tantivy = "=0.27.0"
 blake3 = "1"
+
+[lints]
+workspace = true

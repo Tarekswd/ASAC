@@ -9,3 +9,6 @@ publish = false
 description = "Potato routing modes and the privacy-over-latency policy types."
 
 [dependencies]
+
+[lints]
+workspace = true

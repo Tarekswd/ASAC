@@ -9,3 +9,6 @@ publish = false
 description = "Loopix-style cover-traffic + Poisson-delay send scheduler for the search path (FLAGSHIP-DESIGN.md F4). Offline-testable core; live mix transport is later."
 
 [dependencies]
+
+[lints]
+workspace = true

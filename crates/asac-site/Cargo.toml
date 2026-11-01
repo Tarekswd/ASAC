@@ -13,3 +13,6 @@ tantivy = "=0.27.0"
 asac-index = { path = "../asac-index" }
 asac-frontend = { path = "../asac-frontend" }
 asac-rank = { path = "../asac-rank" }
+
+[lints]
+workspace = true

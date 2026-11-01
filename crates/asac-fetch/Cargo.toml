@@ -22,3 +22,6 @@ webpki-roots = "1"
 flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
 url = "2.5.8"
 anyhow = "1"
+
+[lints]
+workspace = true

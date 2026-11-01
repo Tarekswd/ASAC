@@ -11,3 +11,6 @@ description = "F5 harness: one client host's emitter. Sends the asac-client Pois
 [dependencies]
 asac-client = { path = "../asac-client" }
 asac-mix = { path = "../asac-mix" }
+
+[lints]
+workspace = true

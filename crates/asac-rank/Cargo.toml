@@ -9,3 +9,6 @@ publish = false
 description = "Link-graph authority (PageRank) over crawled pages, and a BM25xauthority blend for ranking v2 (PLAN 4.3 #4)."
 
 [dependencies]
+
+[lints]
+workspace = true

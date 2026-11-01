@@ -10,3 +10,6 @@ description = "Pre-index content-safety filter (launch blocker) for the ASAC sea
 
 [dependencies]
 blake3 = "=1.8.7"
+
+[lints]
+workspace = true

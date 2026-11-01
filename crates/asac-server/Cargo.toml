@@ -26,6 +26,9 @@ tor-hsservice = "=0.47.0"
 tor-cell = "=0.47.0"
 # HsId hides the .onion address behind safelog redaction; DisplayRedacted::display_unredacted prints it.
 safelog = "0.10"
-tokio = { version = "1", features = ["rt-multi-thread", "signal", "macros"] }
+tokio = { version = "1", features = ["rt-multi-thread", "signal", "macros", "sync", "time"] }
 futures = "0.3"
 anyhow = "1"
+
+[lints]
+workspace = true

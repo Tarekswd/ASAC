@@ -33,3 +33,8 @@ edition = "2021"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/Tarekswd/asac"
 rust-version = "1.92"
+
+# No hand-rolled unsafe anywhere in ASAC's own crates (crypto/transport come from Arti + audited libs). Forbid
+# it workspace-wide so that stays true; each member opts in with `[lints] workspace = true`.
+[workspace.lints.rust]
+unsafe_code = "forbid"

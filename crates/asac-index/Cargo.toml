@@ -12,3 +12,6 @@ description = "Full-text BM25 index (Tantivy) for the ASAC search engine, gated 
 tantivy = "=0.27.0"
 serde_json = "1"
 asac-safety = { path = "../asac-safety" }
+
+[lints]
+workspace = true

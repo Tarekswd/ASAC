@@ -40,3 +40,17 @@ jobs:
 
       - name: Test
         run: cargo test --workspace
+
+  audit:
+    name: cargo audit (dependency advisories)
+    runs-on: ubuntu-latest
+    # Don't force -D warnings when building the audit tool itself.
+    env:
+      RUSTFLAGS: ""
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+      - name: Audit dependencies
+        # Reads .cargo/audit.toml (known, fix-less upstream advisories are ignored there); fails on anything new.
+        run: cargo audit

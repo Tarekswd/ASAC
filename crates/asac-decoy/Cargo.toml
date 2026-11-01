@@ -12,3 +12,6 @@ description = "Client-side decoy-query generator for self-directed query obfusca
 # CSPRNG for decoy selection: a predictable PRNG would let an observer filter decoys out (PIR-SECURITY.md O6).
 rand_chacha = "0.10"
 rand_core = "0.10"
+
+[lints]
+workspace = true

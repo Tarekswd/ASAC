@@ -100,6 +100,17 @@ Ordered roughly by dependency and by how much it unblocks.
 - **Depends on:** everything above being stable.
 - **Clears:** PLAN Phase 5 gate (ship readiness).
 
+### Known dependency advisories (inherited from Arti)
+`cargo audit` runs in CI. These advisories are in the **Arti/Tor dependency tree, not ASAC's own crates**, and
+have no available fix; they are ignored in `.cargo/audit.toml` (CI still fails on anything new) and re-reviewed
+on every Arti upgrade:
+- **RUSTSEC-2023-0071** — `rsa` 0.9.x "Marvin" timing sidechannel, via `arti-client → tor-hscrypto →
+  ssh-key-fork-arti → rsa`. Medium; relevant to raise with the Tor/crypto contacts.
+- **RUSTSEC-2026-0387** — `crypto-bigint` 0.5.5 constant-time variability, same tree.
+- **RUSTSEC-2025-0141** (`bincode`), **RUSTSEC-2024-0436** (`paste`) — unmaintained-crate warnings.
+
+ASAC's own crates carry **no `unsafe`** (forbidden workspace-wide) and no untrusted-input panics.
+
 ## 9. Publish the repository — DONE
 - **Done:** pushed to `github.com/Tarekswd/ASAC` (public), renamed from `potarek` to `asac`. CI is in place
   (`.github/workflows/ci.yml`): `cargo fmt --check`, `cargo clippy --workspace --all-targets` with

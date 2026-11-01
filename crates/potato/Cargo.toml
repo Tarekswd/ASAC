@@ -17,3 +17,6 @@ tokio = { version = "1", features = ["macros", "rt-multi-thread", "io-util"] }
 futures = "0.3"
 anyhow = "1"
 tracing-subscriber = "0.3"
+
+[lints]
+workspace = true

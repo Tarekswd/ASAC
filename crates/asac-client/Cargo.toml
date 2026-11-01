@@ -11,3 +11,6 @@ description = "Client-side query stream: real searches interleaved with vetted d
 [dependencies]
 asac-mix = { path = "../asac-mix" }
 asac-decoy = { path = "../asac-decoy" }
+
+[lints]
+workspace = true

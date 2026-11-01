@@ -9,3 +9,6 @@ publish = false
 description = "F5 harness: the global network observer. Records the arrival time + source of every packet into a CSV for the anonymity analysis (sim/shadow)."
 
 [dependencies]
+
+[lints]
+workspace = true
