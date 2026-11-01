@@ -46,7 +46,14 @@ fn main() -> anyhow::Result<()> {
     let mut index = AsacIndex::new()?;
     let filter = ContentFilter::new(NoKnownIllegal);
     for d in &docs {
-        index.add(&filter, &d.title, &d.url, &d.text, &d.links.join("\n"))?;
+        index.add_with_bytes(
+            &filter,
+            &d.title,
+            &d.url,
+            &d.text,
+            &d.links.join("\n"),
+            d.body.as_bytes(),
+        )?;
     }
     index.commit()?;
 

@@ -78,7 +78,14 @@ fn main() -> Result<()> {
     let mut index = AsacIndex::open_or_create(&index_dir)?;
     let filter = ContentFilter::new(NoKnownIllegal);
     for d in &docs {
-        index.add(&filter, &d.title, &d.url, &d.text, &d.links.join("\n"))?;
+        index.add_with_bytes(
+            &filter,
+            &d.title,
+            &d.url,
+            &d.text,
+            &d.links.join("\n"),
+            d.body.as_bytes(),
+        )?;
     }
     index.commit()?;
 
@@ -143,7 +150,14 @@ fn spawn_recrawl(mut index: AsacIndex, seeds: Vec<String>, interval: Duration, a
             let seed_refs: Vec<&str> = seeds.iter().map(String::as_str).collect();
             let docs = crawl(&fetcher, &seed_refs, &cfg);
             for d in &docs {
-                if let Err(e) = index.add(&filter, &d.title, &d.url, &d.text, &d.links.join("\n")) {
+                if let Err(e) = index.add_with_bytes(
+                    &filter,
+                    &d.title,
+                    &d.url,
+                    &d.text,
+                    &d.links.join("\n"),
+                    d.body.as_bytes(),
+                ) {
                     eprintln!("re-crawl index error: {e}");
                 }
             }

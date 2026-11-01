@@ -121,12 +121,14 @@ impl Default for CrawlConfig {
     }
 }
 
-/// One crawled page, ready to hand to `asac_index::AsacIndex::add` (title, url, text, links).
+/// One crawled page, ready to hand to the index. `text` is the extracted visible text (what gets indexed);
+/// `body` is the document **as fetched** (what the content-safety filter should hash).
 pub struct CrawledDoc {
     pub url: String,
     pub title: String,
     pub text: String,
     pub links: Vec<String>,
+    pub body: String,
 }
 
 /// Breadth-first crawl from `seeds`, fetching through `fetcher`. Respects each origin's `robots.txt`, stays in
@@ -175,6 +177,7 @@ pub fn crawl<F: Fetcher>(fetcher: &F, seeds: &[&str], cfg: &CrawlConfig) -> Vec<
             title: ex.title,
             text: ex.text,
             links: ex.links,
+            body: page.body, // the document as fetched, for the safety hash
         });
     }
     out

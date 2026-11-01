@@ -15,6 +15,15 @@
 //!
 //! This crate is not a substitute for legal review, a classifier, or a trust-and-safety process; it is the
 //! code seam those processes plug into.
+//!
+//! **Scope limit — what the hash layers actually hash.** The crawl path hashes the document **as fetched**
+//! (`asac_index::AsacIndex::add_with_bytes` passes the raw page body, not the lossily-extracted text), so the
+//! exact-hash and partner [`HashMatchBackend`] layers match the bytes a takedown or partner list actually
+//! references. The residual limit is upstream: the crawler is **HTML-only and never downloads media**, so no
+//! image/video bytes ever enter the pipeline — industry CSAM **image / perceptual** hash sets (e.g. PhotoDNA)
+//! therefore still do **not** apply to the current crawl surface, and would only take effect if a
+//! media-fetching crawler were added (and a partner agreement signed). Today's media defences are the
+//! host-blocklist takedown, keyword, and legal/partner processes. State this plainly to a content-safety partner.
 
 use std::collections::HashSet;
 

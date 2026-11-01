@@ -134,7 +134,8 @@ impl AsacIndex {
         self.add_at(filter, title, url, body, links, now_secs())
     }
 
-    /// Like [`AsacIndex::add`] but with an explicit `fetched_at` (Unix seconds) for the freshness signal.
+    /// Like [`AsacIndex::add`] but with an explicit `fetched_at` (Unix seconds) for the freshness signal. The
+    /// safety hash is taken over `body` (fine when the body IS the fetched document, e.g. in tests).
     pub fn add_at<B: HashMatchBackend>(
         &mut self,
         filter: &ContentFilter<B>,
@@ -144,8 +145,40 @@ impl AsacIndex {
         links: &str,
         fetched_at: u64,
     ) -> tantivy::Result<Verdict> {
-        // Gate on the URL (host takedowns), the body bytes, and the human-visible text (title + body).
-        let verdict = filter.check(url, body.as_bytes(), &format!("{title} {body}"));
+        self.add_at_with_bytes(filter, title, url, body, links, body.as_bytes(), fetched_at)
+    }
+
+    /// Like [`AsacIndex::add`] but the content-safety hash is computed over `doc_bytes` — the document **as
+    /// fetched** — rather than the indexed text. The crawl path indexes *extracted* text but must hash the
+    /// real served bytes, so the exact-hash and partner [`HashMatchBackend`] layers match what a takedown or a
+    /// partner list actually references. (Media is still out of scope: the crawler is HTML-only, so this does
+    /// not enable image/perceptual CSAM hashing — see the `asac-safety` scope note.)
+    pub fn add_with_bytes<B: HashMatchBackend>(
+        &mut self,
+        filter: &ContentFilter<B>,
+        title: &str,
+        url: &str,
+        body: &str,
+        links: &str,
+        doc_bytes: &[u8],
+    ) -> tantivy::Result<Verdict> {
+        self.add_at_with_bytes(filter, title, url, body, links, doc_bytes, now_secs())
+    }
+
+    /// Core insert: safety-gate on the URL (host takedowns), `doc_bytes` (exact-hash + partner match), and the
+    /// human-visible text (title + body); then index the document only if allowed.
+    #[allow(clippy::too_many_arguments)] // a document is genuinely this many fields; grouping them would only move the noise
+    pub fn add_at_with_bytes<B: HashMatchBackend>(
+        &mut self,
+        filter: &ContentFilter<B>,
+        title: &str,
+        url: &str,
+        body: &str,
+        links: &str,
+        doc_bytes: &[u8],
+        fetched_at: u64,
+    ) -> tantivy::Result<Verdict> {
+        let verdict = filter.check(url, doc_bytes, &format!("{title} {body}"));
         if matches!(verdict, Verdict::Block(_)) {
             return Ok(verdict);
         }
@@ -397,6 +430,43 @@ mod tests {
         assert!(
             idx.search("forbidden", 5).unwrap().is_empty(),
             "blocked doc must not be indexed"
+        );
+    }
+
+    // The exact-hash / partner layers must hash the document AS FETCHED (doc_bytes), not the indexed text.
+    // Capture every hash the backend is asked about: same indexed text + different fetched bytes must yield
+    // different hashes, and add() (hashes the text) must differ from add_with_bytes() (hashes the bytes).
+    #[test]
+    fn safety_hash_is_over_fetched_bytes_not_indexed_text() {
+        use std::cell::RefCell;
+        use std::rc::Rc;
+
+        struct Capture(Rc<RefCell<Vec<[u8; 32]>>>);
+        impl HashMatchBackend for Capture {
+            fn is_known_illegal(&self, h: &[u8; 32]) -> bool {
+                self.0.borrow_mut().push(*h);
+                false // never block; we only inspect which bytes were hashed
+            }
+        }
+
+        let seen = Rc::new(RefCell::new(Vec::<[u8; 32]>::new()));
+        let f = ContentFilter::new(Capture(seen.clone()));
+        let mut idx = AsacIndex::new().unwrap();
+        idx.add_with_bytes(&f, "t", "http://x/1", "indexed text", "", b"RAW-DOC-ONE")
+            .unwrap();
+        idx.add_with_bytes(&f, "t", "http://x/2", "indexed text", "", b"RAW-DOC-TWO")
+            .unwrap();
+        idx.add(&f, "t", "http://x/3", "indexed text", "").unwrap();
+
+        let h = seen.borrow();
+        assert_eq!(h.len(), 3);
+        assert_ne!(
+            h[0], h[1],
+            "same indexed text, different fetched bytes -> different safety hash"
+        );
+        assert_ne!(
+            h[0], h[2],
+            "add_with_bytes hashes the fetched bytes; add hashes the indexed text"
         );
     }
 }
