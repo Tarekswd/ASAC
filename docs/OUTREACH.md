@@ -36,6 +36,7 @@ that a single honest-but-curious server learns nothing about the query, and we w
 - `docs/PIR-SECURITY.md` — the security argument, incl. the §6 game-based reductions (the main review target).
 - `docs/FLAGSHIP-DESIGN.md` — design, threat model, measured PIR costs, the Shadow measurement plan.
 - `docs/THREAT-MODEL.md` — what is in and out of scope.
+- `docs/SAFETY-ARCHITECTURE.md` — the pre-index content-safety filter: layers, fail-closed design, and honest limits (partner backend inert in the current build, no media hashing).
 - `REPRODUCE.md` — exact commands to rebuild and re-check every claim (build/test, PIR costs, Shadow F5).
 - `docs/ROADMAP.md` — where this sits and what is still open (O4/O5, live transport, audit).
 
