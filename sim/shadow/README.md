@@ -9,6 +9,11 @@ tested — `asac_mix::timing_observer_accuracy` shows a timing-only observer is 
 is the plan for the *network-level* version: the same question with packets actually crossing a simulated
 network and a global observer of the links (FLAGSHIP-DESIGN.md §7, EXTERNAL-PLAN.md item 2).
 
+> **Scaling to a realistic Tor network:** the `mix-anonymity.yaml` template here is a hand-built switch
+> topology. To run this measurement on a *realistic, real-metrics-modeled* Tor network at configurable scale
+> (MILESTONES.md M2), see **[TORNETTOOLS.md](TORNETTOOLS.md)** — it uses `shadow/tornettools` to generate the
+> network and `provision_tornettools.sh` / `patch_asac_config.py` here to build the toolchain and swap in ASAC.
+
 ## What it measures
 1. **Anonymity set** — with `N` client hosts, exactly one actually searching and the rest idle (all emitting
    the Poisson cover stream from `asac-client`), how well can an observer of every link identify the searcher?
